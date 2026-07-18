@@ -1,1 +1,4 @@
 databaseChangeLog:
+  - include:
+      file: V1_create_tables.sql
+      relativeToChangelogFile: true
