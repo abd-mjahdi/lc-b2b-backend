@@ -1,4 +1,4 @@
-package com.example.portail_b2b;
+package com.lesieurcristal.b2bportal;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;

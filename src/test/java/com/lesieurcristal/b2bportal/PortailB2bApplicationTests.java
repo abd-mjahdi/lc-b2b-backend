@@ -1,4 +1,4 @@
-package com.example.portail_b2b;
+package com.lesieurcristal.b2bportal;
 
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.SpringBootTest;
