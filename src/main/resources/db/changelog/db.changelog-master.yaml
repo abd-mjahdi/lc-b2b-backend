@@ -2,3 +2,6 @@ databaseChangeLog:
   - include:
       file: V1_create_tables.sql
       relativeToChangelogFile: true
+  - include:
+      file: V3_account_activation_tokens.sql
+      relativeToChangelogFile: true

@@ -26,3 +26,7 @@ app:
   cors:
     allowed-origins:
       - ${CORS_ALLOWED_ORIGIN:http://localhost:3000}
+  activation:
+    token-expiration-ms: ${ACTIVATION_TOKEN_EXPIRATION_MS:604800000}
+    frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
+    activation-path: ${ACTIVATION_PATH:/activate}
