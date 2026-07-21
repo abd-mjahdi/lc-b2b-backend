@@ -3,5 +3,10 @@ databaseChangeLog:
       file: V1_create_tables.sql
       relativeToChangelogFile: true
   - include:
-      file: V3_account_activation_tokens.sql
+      file: V2_account_activation_tokens.sql
       relativeToChangelogFile: true
+  - include:
+      file: V3_seed_data.sql
+      relativeToChangelogFile: true
+
+  

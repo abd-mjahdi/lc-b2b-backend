@@ -57,13 +57,13 @@ VALUES
 INSERT INTO app.users
     (customer_number, last_name, first_name, email, phone, login, password_hash, role, language, is_active, created_at, updated_at)
 VALUES
-    (NULL,       'Bakkali',   'Nadia',   'nadia.bakkali@lesieurcristal-portal.ma', '+212666667788', 'admin.portal',   '$2a$10$placeholderHashAdmin0000000000000000', 'ADMIN',  'fr', true, '2025-12-01 09:00:00+01', '2025-12-01 09:00:00+01'),
-    (NULL,       'Fassi',     'Omar',    'omar.fassi@lesieurcristal-portal.ma',    '+212667778899', 'support.lesieur','$2a$10$placeholderHashAdmin0000000000000001', 'ADMIN',  'fr', true, '2025-12-01 09:15:00+01', '2025-12-01 09:15:00+01'),
-    ('CUST0001', 'Alami',     'Amine',   'amine.alami@alamal-epicerie.ma',         '+212661112233', 'aalami',         '$2a$10$placeholderHashClient000000000000000', 'CLIENT', 'fr', true, '2026-01-20 10:00:00+01', '2026-01-20 10:00:00+01'),
-    ('CUST0002', 'Bennani',   'Khadija', 'khadija.bennani@superdiscount.ma',       '+212662223344', 'kbennani',       '$2a$10$placeholderHashClient000000000000001', 'CLIENT', 'fr', true, '2026-01-22 10:00:00+01', '2026-01-22 10:00:00+01'),
-    ('CUST0003', 'Idrissi',   'Youssef', 'youssef.idrissi@marjaneholding.ma',      '+212663334455', 'yidrissi',       '$2a$10$placeholderHashClient000000000000002', 'CLIENT', 'fr', true, '2026-01-25 10:00:00+01', '2026-01-25 10:00:00+01'),
-    ('CUST0004', 'Chraibi',   'Hicham',  'hicham.chraibi@ahlan-boulangerie.ma',    '+212664445566', 'hchraibi',       '$2a$10$placeholderHashClient000000000000003', 'CLIENT', 'fr', true, '2026-02-02 10:00:00+01', '2026-02-02 10:00:00+01'),
-    ('CUST0005', 'Moussaoui', 'Salma',   'salma.moussaoui@cashfood.ma',            '+212665556677', 'smoussaoui',     '$2a$10$placeholderHashClient000000000000004', 'CLIENT', 'fr', true, '2026-02-05 10:00:00+01', '2026-02-05 10:00:00+01');
+    (NULL,       'Bakkali',   'Nadia',   'nadia.bakkali@lesieurcristal-portal.ma', '+212666667788', 'admin.portal',   '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'ADMIN',  'fr', true, '2025-12-01 09:00:00+01', '2025-12-01 09:00:00+01'),
+    (NULL,       'Fassi',     'Omar',    'omar.fassi@lesieurcristal-portal.ma',    '+212667778899', 'support.lesieur','$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'ADMIN',  'fr', true, '2025-12-01 09:15:00+01', '2025-12-01 09:15:00+01'),
+    ('CUST0001', 'Alami',     'Amine',   'amine.alami@alamal-epicerie.ma',         '+212661112233', 'aalami',         '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'CLIENT', 'fr', true, '2026-01-20 10:00:00+01', '2026-01-20 10:00:00+01'),
+    ('CUST0002', 'Bennani',   'Khadija', 'khadija.bennani@superdiscount.ma',       '+212662223344', 'kbennani',       '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'CLIENT', 'fr', true, '2026-01-22 10:00:00+01', '2026-01-22 10:00:00+01'),
+    ('CUST0003', 'Idrissi',   'Youssef', 'youssef.idrissi@marjaneholding.ma',      '+212663334455', 'yidrissi',       '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'CLIENT', 'fr', true, '2026-01-25 10:00:00+01', '2026-01-25 10:00:00+01'),
+    ('CUST0004', 'Chraibi',   'Hicham',  'hicham.chraibi@ahlan-boulangerie.ma',    '+212664445566', 'hchraibi',       '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'CLIENT', 'fr', true, '2026-02-02 10:00:00+01', '2026-02-02 10:00:00+01'),
+    ('CUST0005', 'Moussaoui', 'Salma',   'salma.moussaoui@cashfood.ma',            '+212665556677', 'smoussaoui',     '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'CLIENT', 'fr', true, '2026-02-05 10:00:00+01', '2026-02-05 10:00:00+01');
 
 -- ----------------------------------------------------------------------------
 -- 4. erp_mock.orders  (invoice_number left NULL — backfilled after invoices)
