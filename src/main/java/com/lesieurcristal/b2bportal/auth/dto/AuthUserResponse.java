@@ -10,6 +10,7 @@ public record AuthUserResponse(
         String lastName,
         UserRole role,
         String customerNumber,
-        String language
+        String language,
+        boolean active
 ) {
 }

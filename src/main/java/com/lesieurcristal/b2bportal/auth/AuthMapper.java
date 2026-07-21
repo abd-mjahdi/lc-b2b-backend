@@ -17,7 +17,8 @@ public final class AuthMapper {
                 user.getLastName(),
                 user.getRole(),
                 UserAuthSupport.customerNumber(user),
-                user.getLanguage()
+                user.getLanguage(),
+                UserAuthSupport.isActive(user)
         );
     }
 }

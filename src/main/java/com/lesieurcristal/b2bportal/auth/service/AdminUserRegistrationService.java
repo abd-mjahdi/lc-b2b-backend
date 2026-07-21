@@ -22,6 +22,7 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.time.Duration;
 import java.time.OffsetDateTime;
 
 @Service
@@ -77,7 +78,7 @@ public class AdminUserRegistrationService {
         user = userRepository.save(user);
 
         OffsetDateTime now = OffsetDateTime.now();
-        OffsetDateTime expiresAt = now.plusMillis(activationProperties.tokenExpirationMs());
+        OffsetDateTime expiresAt = now.plus(Duration.ofMillis(activationProperties.tokenExpirationMs()));
         String rawToken = activationTokenGenerator.generateRawToken();
 
         activationTokenRepository.deleteByUser_IdAndUsedAtIsNull(user.getId());
