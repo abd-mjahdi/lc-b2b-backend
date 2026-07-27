@@ -54,7 +54,7 @@
 
 24. Mettre en place la gestion globale des erreurs, un format de réponse API standard, la validation des entrées, et la configuration CORS pour le frontend Next.js.
 
-25. Ajouter Swagger/OpenAPI pour documenter les endpoints au fil de l'eau et faciliter la coordination sur les contrats d'API entre les deux stagiaires.
+25. [x] Ajouter Swagger/OpenAPI pour documenter les endpoints au fil de l'eau et faciliter la coordination sur les contrats d'API entre les deux stagiaires.
 
 26. Décider explicitement de ne pas mettre en place Redis (le mock répond instantanément) ni RabbitMQ (rien dans ce périmètre MVP n'a besoin d'asynchrone) — ce sont des optimisations pour plus tard, pas des prérequis.
 
