@@ -23,6 +23,15 @@ public class GlobalExceptionHandler {
         ));
     }
 
+    @ExceptionHandler(com.lesieurcristal.b2bportal.order.OrderException.class)
+    public ResponseEntity<Map<String, Object>> handleOrderException(com.lesieurcristal.b2bportal.order.OrderException ex) {
+        return ResponseEntity.status(ex.getStatus()).body(errorBody(
+                ex.getStatus().value(),
+                ex.getCode(),
+                ex.getMessage()
+        ));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<Map<String, Object>> handleValidation(MethodArgumentNotValidException ex) {
         Map<String, String> fieldErrors = new HashMap<>();

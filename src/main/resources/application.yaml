@@ -3,9 +3,9 @@ server:
 
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:portail_b2b}
-    username: ${DB_USERNAME:postgres}
-    password: ${DB_PASSWORD:simo.2006}
+    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
+    username: ${DB_USERNAME}
+    password: ${DB_PASSWORD}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -23,25 +23,27 @@ spring:
       mode: never
 
   mail:
-    host: ${MAIL_HOST:smtp.gmail.com}
-    port: ${MAIL_PORT:587}
-    username: ${MAIL_USERNAME:}
-    password: ${MAIL_PASSWORD:}
+    host: ${MAIL_HOST}
+    port: ${MAIL_PORT}
+    username: ${MAIL_USERNAME}
+    password: ${MAIL_PASSWORD}
     properties:
       mail:
         smtp:
-          auth: ${MAIL_SMTP_AUTH:true}
+          auth: ${MAIL_SMTP_AUTH}
           starttls:
-            enable: ${MAIL_SMTP_STARTTLS:true}
+            enable: ${MAIL_SMTP_STARTTLS}
 
 app:
   jwt:
-    secret: ${JWT_SECRET:dGhpcy1pcy1hLXZlcnktc2VjdXJlLWtleS1mb3ItamF2YS1zcHJpbmctYm9vdC1qd3QtYXV0aGVudGljYXRpb24=}
-    expiration-ms: ${JWT_EXPIRATION_MS:86400000}
+    secret: ${JWT_SECRET}
+    expiration-ms: ${JWT_EXPIRATION_MS}
+
   cors:
     allowed-origins:
-      - ${CORS_ALLOWED_ORIGIN:http://localhost:3000}
+      - ${CORS_ALLOWED_ORIGIN}
+
   activation:
-    token-expiration-ms: ${ACTIVATION_TOKEN_EXPIRATION_MS:604800000}
-    frontend-base-url: ${FRONTEND_BASE_URL:http://localhost:3000}
-    activation-path: ${ACTIVATION_PATH:/activate}
+    token-expiration-ms: ${ACTIVATION_TOKEN_EXPIRATION_MS}
+    frontend-base-url: ${FRONTEND_BASE_URL}
+    activation-path: ${ACTIVATION_PATH}

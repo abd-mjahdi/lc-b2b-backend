@@ -60,9 +60,9 @@
 
 ## Phase 4 : Backend — commandes, statut, factures (Jours 13-16)
 
-27. Implémenter `GET /api/orders` : historique des commandes du client connecté via `ErpOrderConnector` (jointure commandes + statut de facture), filtré par `customer_number`.
+27. [x] Implémenter `GET /api/orders` : historique des commandes du client connecté via `ErpOrderConnector` (jointure commandes + statut de facture), filtré par `customer_number`.
 
-28. Implémenter `GET /api/orders/{id}/status` : statut en direct d'une commande, lu depuis `erp_mock.order_status`, sans cache pour le MVP.
+28. [x] Implémenter `GET /api/orders/{id}/status` : statut en direct d'une commande, lu depuis `erp_mock.order_status`, sans cache pour le MVP.
 
 29. Choisir une librairie PDF Java (OpenPDF ou Apache PDFBox) et créer un premier template de facture (en-tête, lignes de commande, montant, statut).
 
