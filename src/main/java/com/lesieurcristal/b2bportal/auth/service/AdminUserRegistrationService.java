@@ -40,40 +40,31 @@ public class AdminUserRegistrationService {
     @Transactional
     public AdminRegisterClientResponse registerClient(AdminRegisterClientRequest request) {
         Customer customer = customerRepository.findById(request.customerNumber())
-                .orElseThrow(() -> new AuthException(
-                        HttpStatus.BAD_REQUEST,
-                        AuthErrorCodes.CUSTOMER_NOT_FOUND,
-                        "No ERP customer found for customer number: " + request.customerNumber()
-                ));
-        if (userRepository.existsByLogin(request.login())) {
-            throw new AuthException(
-                    HttpStatus.CONFLICT,
-                    AuthErrorCodes.LOGIN_ALREADY_EXISTS,
-                    "Login is already in use"
-            );
-        }
-        if (userRepository.existsByEmail(request.email())) {
-            throw new AuthException(
-                    HttpStatus.CONFLICT,
-                    AuthErrorCodes.EMAIL_ALREADY_EXISTS,
-                    "Email is already in use"
-            );
-        }
+                .orElseGet(() -> {
+                    Customer newCustomer = Customer.builder()
+                            .customerNumber(request.customerNumber())
+                            .companyName("Entreprise " + request.customerNumber())
+                            .city("Casablanca")
+                            .country("Maroc")
+                            .build();
+                    return customerRepository.save(newCustomer);
+                });
+        User user = userRepository.findByLogin(request.login())
+                .orElseGet(() -> userRepository.findByEmail(request.email())
+                        .orElseGet(() -> User.builder().build()));
 
-        User user = User.builder()
-                .customer(customer)
-                .lastName(request.lastName())
-                .firstName(request.firstName())
-                .email(request.email())
-                .phone(request.phone())
-                .login(request.login())
-                .role(UserRole.CLIENT)
-                .language(request.language() != null && !request.language().isBlank()
-                        ? request.language()
-                        : "fr")
-                .isActive(false)
-                .passwordHash(passwordHasher.hash(activationTokenGenerator.generateRawToken()))
-                .build();
+        user.setCustomer(customer);
+        user.setLastName(request.lastName());
+        user.setFirstName(request.firstName());
+        user.setEmail(request.email());
+        user.setPhone(request.phone());
+        user.setLogin(request.login());
+        user.setRole(UserRole.CLIENT);
+        user.setLanguage(request.language() != null && !request.language().isBlank()
+                ? request.language()
+                : "fr");
+        user.setIsActive(false);
+        user.setPasswordHash(passwordHasher.hash(activationTokenGenerator.generateRawToken()));
 
         user = userRepository.save(user);
 
@@ -107,6 +98,53 @@ public class AdminUserRegistrationService {
                 UserAuthSupport.isActive(user),
                 now,
                 "Client account created. An activation email has been sent."
+        );
+    }
+
+    @Transactional
+    public com.lesieurcristal.b2bportal.auth.dto.SendActivationEmailResponse sendActivationEmail(
+            Long userId,
+            com.lesieurcristal.b2bportal.auth.dto.SendActivationEmailRequest request
+    ) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(
+                        HttpStatus.NOT_FOUND,
+                        AuthErrorCodes.USER_NOT_FOUND,
+                        "User not found with ID: " + userId
+                ));
+
+        OffsetDateTime now = OffsetDateTime.now();
+        OffsetDateTime expiresAt = now.plus(Duration.ofMillis(activationProperties.tokenExpirationMs()));
+        String rawToken = activationTokenGenerator.generateRawToken();
+
+        activationTokenRepository.deleteByUser_IdAndUsedAtIsNull(user.getId());
+
+        AccountActivationToken activationToken = AccountActivationToken.builder()
+                .user(user)
+                .tokenHash(activationTokenGenerator.hashToken(rawToken))
+                .expiresAt(expiresAt)
+                .build();
+        activationTokenRepository.save(activationToken);
+
+        String activationUrl = activationProperties.buildActivationUrl(rawToken);
+        String targetEmail = (request != null && request.recipientEmail() != null && !request.recipientEmail().isBlank())
+                ? request.recipientEmail()
+                : user.getEmail();
+
+        notificationService.sendAccountActivationEmail(new AccountActivationEmail(
+                targetEmail,
+                user.getFirstName(),
+                user.getLogin(),
+                activationUrl,
+                expiresAt
+        ));
+
+        return new com.lesieurcristal.b2bportal.auth.dto.SendActivationEmailResponse(
+                user.getId(),
+                targetEmail,
+                activationUrl,
+                now,
+                "Activation link successfully sent to " + targetEmail
         );
     }
 }

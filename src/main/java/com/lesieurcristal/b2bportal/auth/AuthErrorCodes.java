@@ -9,6 +9,7 @@ public class AuthErrorCodes {
     public static final String INVALID_ACTIVATION_TOKEN = "INVALID_ACTIVATION_TOKEN";
     public static final String ACTIVATION_TOKEN_EXPIRED = "ACTIVATION_TOKEN_EXPIRED";
     public static final String ACCOUNT_ALREADY_ACTIVE = "ACCOUNT_ALREADY_ACTIVE";
+    public static final String USER_NOT_FOUND = "USER_NOT_FOUND";
 
     private AuthErrorCodes() {
     }

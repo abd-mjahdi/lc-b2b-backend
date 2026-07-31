@@ -121,8 +121,13 @@ public class AuthService {
         userRepository.save(user);
         activationTokenRepository.save(activationToken);
 
+        AuthenticatedUser principal = new AuthenticatedUser(user);
+        String accessToken = jwtService.generateToken(principal);
+
         return new ActivateAccountResponse(
                 "Account activated successfully. You can now log in.",
+                accessToken,
+                "Bearer",
                 AuthMapper.toUserResponse(user)
         );
     }

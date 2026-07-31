@@ -57,6 +57,7 @@ VALUES
 INSERT INTO app.users
     (customer_number, last_name, first_name, email, phone, login, password_hash, role, language, is_active, created_at, updated_at)
 VALUES
+    (NULL,       'Khattabi',  'Rachad',  'rachad.khattabi@gmail.com',              '+212600000000', 'rachad.khattabi@gmail.com', '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'ADMIN',  'fr', true, '2026-01-01 09:00:00+01', '2026-01-01 09:00:00+01'),
     (NULL,       'Bakkali',   'Nadia',   'nadia.bakkali@lesieurcristal-portal.ma', '+212666667788', 'admin.portal',   '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'ADMIN',  'fr', true, '2025-12-01 09:00:00+01', '2025-12-01 09:00:00+01'),
     (NULL,       'Fassi',     'Omar',    'omar.fassi@lesieurcristal-portal.ma',    '+212667778899', 'support.lesieur','$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'ADMIN',  'fr', true, '2025-12-01 09:15:00+01', '2025-12-01 09:15:00+01'),
     ('CUST0001', 'Alami',     'Amine',   'amine.alami@alamal-epicerie.ma',         '+212661112233', 'aalami',         '$2a$10$BDATxUMlz6t9GcZ3dQFFfuOa3uyLyapUxBpYfttLEeo3BPhzicFSS', 'CLIENT', 'fr', true, '2026-01-20 10:00:00+01', '2026-01-20 10:00:00+01'),

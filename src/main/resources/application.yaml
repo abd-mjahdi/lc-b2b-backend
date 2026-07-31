@@ -1,8 +1,11 @@
+server:
+  port: 8081
+
 spring:
   datasource:
-    url: jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_NAME}
-    username: ${DB_USERNAME}
-    password: ${DB_PASSWORD}
+    url: jdbc:postgresql://${DB_HOST:localhost}:${DB_PORT:5432}/${DB_NAME:portail_b2b}
+    username: ${DB_USERNAME:postgres}
+    password: ${DB_PASSWORD:simo.2006}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -19,9 +22,21 @@ spring:
     init:
       mode: never
 
+  mail:
+    host: ${MAIL_HOST:smtp.gmail.com}
+    port: ${MAIL_PORT:587}
+    username: ${MAIL_USERNAME:}
+    password: ${MAIL_PASSWORD:}
+    properties:
+      mail:
+        smtp:
+          auth: ${MAIL_SMTP_AUTH:true}
+          starttls:
+            enable: ${MAIL_SMTP_STARTTLS:true}
+
 app:
   jwt:
-    secret: ${JWT_SECRET}
+    secret: ${JWT_SECRET:dGhpcy1pcy1hLXZlcnktc2VjdXJlLWtleS1mb3ItamF2YS1zcHJpbmctYm9vdC1qd3QtYXV0aGVudGljYXRpb24=}
     expiration-ms: ${JWT_EXPIRATION_MS:86400000}
   cors:
     allowed-origins:

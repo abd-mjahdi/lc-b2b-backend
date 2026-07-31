@@ -12,6 +12,11 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.lesieurcristal.b2bportal.auth.dto.SendActivationEmailRequest;
+import com.lesieurcristal.b2bportal.auth.dto.SendActivationEmailResponse;
+import org.springframework.web.bind.annotation.PathVariable;
+import java.util.UUID;
+
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
@@ -23,5 +28,13 @@ public class AdminUserController {
     @ResponseStatus(HttpStatus.CREATED)
     public AdminRegisterClientResponse registerClient(@Valid @RequestBody AdminRegisterClientRequest request) {
         return adminUserRegistrationService.registerClient(request);
+    }
+
+    @PostMapping("/{userId}/send-activation")
+    public SendActivationEmailResponse sendActivationEmail(
+            @PathVariable Long userId,
+            @RequestBody(required = false) SendActivationEmailRequest request
+    ) {
+        return adminUserRegistrationService.sendActivationEmail(userId, request);
     }
 }
