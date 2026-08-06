@@ -47,3 +47,10 @@ app:
     token-expiration-ms: ${ACTIVATION_TOKEN_EXPIRATION_MS}
     frontend-base-url: ${FRONTEND_BASE_URL}
     activation-path: ${ACTIVATION_PATH}
+
+springdoc:
+  swagger-ui:
+    path: /swagger-ui.html
+    operationsSorter: method
+    tagsSorter: alpha
+    persistAuthorization: true

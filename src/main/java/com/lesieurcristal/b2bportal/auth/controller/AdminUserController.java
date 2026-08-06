@@ -3,9 +3,11 @@ package com.lesieurcristal.b2bportal.auth.controller;
 import com.lesieurcristal.b2bportal.auth.dto.AdminRegisterClientRequest;
 import com.lesieurcristal.b2bportal.auth.dto.AdminRegisterClientResponse;
 import com.lesieurcristal.b2bportal.auth.service.AdminUserRegistrationService;
+import com.lesieurcristal.b2bportal.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
+import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -20,6 +22,7 @@ import com.lesieurcristal.b2bportal.auth.dto.SendActivationEmailResponse;
 import org.springframework.web.bind.annotation.PathVariable;
 
 @Tag(name = "Administration Utilisateurs", description = "Endpoints réservés aux administrateurs pour la gestion des comptes")
+@SecurityRequirement(name = OpenApiConfig.SECURITY_SCHEME_NAME)
 @RestController
 @RequestMapping("/api/admin/users")
 @RequiredArgsConstructor
