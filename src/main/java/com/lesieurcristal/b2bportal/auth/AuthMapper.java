@@ -18,7 +18,8 @@ public final class AuthMapper {
                 user.getRole(),
                 UserAuthSupport.customerNumber(user),
                 user.getLanguage(),
-                UserAuthSupport.isActive(user)
+                UserAuthSupport.isActive(user),
+                Boolean.TRUE.equals(user.getIsDeactivated())
         );
     }
 }

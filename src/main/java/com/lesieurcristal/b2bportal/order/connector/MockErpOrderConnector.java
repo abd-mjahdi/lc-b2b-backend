@@ -21,14 +21,21 @@ public class MockErpOrderConnector implements ErpOrderConnector {
     private final OrderStatusRepository orderStatusRepository;
 
     @Override
-    public List<OrderResponseDto> getOrdersByCustomerNumber(String customerNumber) {
+    public org.springframework.data.domain.Page<OrderResponseDto> getOrdersByCustomerNumber(
+            String customerNumber,
+            java.time.LocalDate startDate,
+            java.time.LocalDate endDate,
+            String status,
+            org.springframework.data.domain.Pageable pageable) {
+
         if (customerNumber == null || customerNumber.isBlank()) {
-            return List.of();
+            return org.springframework.data.domain.Page.empty(pageable);
         }
-        List<Order> orders = orderRepository.findByCustomerCustomerNumberOrderByOrderDateDesc(customerNumber);
-        return orders.stream()
-                .map(this::mapToOrderResponseDto)
-                .toList();
+        
+        org.springframework.data.domain.Page<Order> ordersPage = orderRepository.findFilteredOrders(
+                customerNumber, startDate, endDate, status, pageable);
+
+        return ordersPage.map(this::mapToOrderResponseDto);
     }
 
     @Override
@@ -42,6 +49,7 @@ public class MockErpOrderConnector implements ErpOrderConnector {
 
     private OrderResponseDto mapToOrderResponseDto(Order order) {
         Invoice invoice = order.getInvoice();
+        OrderStatus status = order.getOrderStatus();
         return new OrderResponseDto(
                 order.getOrderNumber(),
                 order.getOrderDate(),
@@ -63,7 +71,8 @@ public class MockErpOrderConnector implements ErpOrderConnector {
                 invoice != null ? invoice.getInvoiceDate() : null,
                 invoice != null ? invoice.getInvoiceStatus() : null,
                 invoice != null ? invoice.getTotalAmount() : null,
-                invoice != null ? invoice.getDueDate() : null
+                invoice != null ? invoice.getDueDate() : null,
+                status != null ? status.getCurrentStatus() : null
         );
     }
 

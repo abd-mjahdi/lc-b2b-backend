@@ -11,6 +11,7 @@ public record AuthUserResponse(
         UserRole role,
         String customerNumber,
         String language,
-        boolean active
+        boolean active,
+        boolean deactivated
 ) {
 }

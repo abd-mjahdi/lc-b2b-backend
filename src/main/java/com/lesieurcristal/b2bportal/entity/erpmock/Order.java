@@ -112,6 +112,9 @@ public class Order {
     @JoinColumn(name = "invoice_number", nullable = true)
     private Invoice invoice;
 
+    @jakarta.persistence.OneToOne(mappedBy = "order", fetch = FetchType.LAZY)
+    private OrderStatus orderStatus;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

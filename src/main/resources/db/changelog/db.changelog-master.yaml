@@ -8,5 +8,8 @@ databaseChangeLog:
   - include:
       file: V3_seed_data.sql
       relativeToChangelogFile: true
+  - include:
+      file: V4_add_is_deactivated_to_users.sql
+      relativeToChangelogFile: true
 
   

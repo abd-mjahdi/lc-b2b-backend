@@ -36,6 +36,7 @@ public class AdminUserRegistrationService {
     private final ActivationProperties activationProperties;
     private final PasswordHasher passwordHasher;
     private final NotificationService notificationService;
+    private final jakarta.persistence.EntityManager entityManager;
 
     @Transactional
     public AdminRegisterClientResponse registerClient(AdminRegisterClientRequest request) {
@@ -113,6 +114,14 @@ public class AdminUserRegistrationService {
                         "User not found with ID: " + userId
                 ));
 
+        if (Boolean.TRUE.equals(user.getIsDeactivated())) {
+            throw new AuthException(
+                    HttpStatus.BAD_REQUEST,
+                    AuthErrorCodes.ACCOUNT_DEACTIVATED,
+                    "Cannot send activation email to a deactivated user."
+            );
+        }
+
         OffsetDateTime now = OffsetDateTime.now();
         OffsetDateTime expiresAt = now.plus(Duration.ofMillis(activationProperties.tokenExpirationMs()));
         String rawToken = activationTokenGenerator.generateRawToken();
@@ -146,5 +155,94 @@ public class AdminUserRegistrationService {
                 now,
                 "Activation link successfully sent to " + targetEmail
         );
+    }
+
+    @Transactional(readOnly = true)
+    public java.util.List<com.lesieurcristal.b2bportal.auth.dto.AuthUserResponse> getUsers(String customerNumber) {
+        java.util.List<User> users;
+        if (customerNumber != null && !customerNumber.isBlank()) {
+            users = userRepository.findByCustomer_CustomerNumber(customerNumber);
+        } else {
+            users = userRepository.findAll();
+        }
+        return users.stream()
+                .map(com.lesieurcristal.b2bportal.auth.AuthMapper::toUserResponse)
+                .collect(java.util.stream.Collectors.toList());
+    }
+
+    @Transactional
+    public com.lesieurcristal.b2bportal.auth.dto.AuthUserResponse deactivateUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(
+                        HttpStatus.NOT_FOUND,
+                        AuthErrorCodes.USER_NOT_FOUND,
+                        "User not found with ID: " + userId
+                ));
+        user.setIsDeactivated(true);
+        user = userRepository.save(user);
+        return com.lesieurcristal.b2bportal.auth.AuthMapper.toUserResponse(user);
+    }
+
+    @Transactional
+    public com.lesieurcristal.b2bportal.auth.dto.AuthUserResponse activateUser(Long userId) {
+        User user = userRepository.findById(userId)
+                .orElseThrow(() -> new AuthException(
+                        HttpStatus.NOT_FOUND,
+                        AuthErrorCodes.USER_NOT_FOUND,
+                        "User not found with ID: " + userId
+                ));
+        user.setIsDeactivated(false);
+        user = userRepository.save(user);
+        return com.lesieurcristal.b2bportal.auth.AuthMapper.toUserResponse(user);
+    }
+
+    @Transactional(readOnly = true)
+    @SuppressWarnings("unchecked")
+    public java.util.List<com.lesieurcristal.b2bportal.auth.dto.CustomerAdminResponse> getAllCustomersWithStats() {
+        String sql = "SELECT " +
+                "    c.customer_number, " +
+                "    c.company_name, " +
+                "    c.postal_address, " +
+                "    c.city, " +
+                "    c.country, " +
+                "    c.phone, " +
+                "    c.email, " +
+                "    c.vat_id, " +
+                "    (SELECT COUNT(*) FROM erp_mock.orders o WHERE o.customer_number = c.customer_number) as order_count, " +
+                "    (SELECT COUNT(*) FROM erp_mock.invoices i WHERE i.customer_number = c.customer_number) as invoice_count, " +
+                "    ((SELECT COUNT(*) FROM app.reclamations r WHERE r.customer_number = c.customer_number AND r.status != 'resolved') + " +
+                "     (SELECT COUNT(*) FROM app.quotation_requests q WHERE q.customer_number = c.customer_number AND q.status = 'new')) as open_req_count, " +
+                "    COALESCE((SELECT SUM(i.total_amount) FROM erp_mock.invoices i WHERE i.customer_number = c.customer_number), 0) as total_revenue " +
+                "FROM erp_mock.customers c";
+
+        java.util.List<Object[]> rows = entityManager.createNativeQuery(sql).getResultList();
+        java.util.List<com.lesieurcristal.b2bportal.auth.dto.CustomerAdminResponse> list = new java.util.ArrayList<>();
+        for (Object[] row : rows) {
+            list.add(com.lesieurcristal.b2bportal.auth.dto.CustomerAdminResponse.builder()
+                    .customerNumber((String) row[0])
+                    .companyName((String) row[1])
+                    .postalAddress((String) row[2])
+                    .city((String) row[3])
+                    .country((String) row[4])
+                    .phone((String) row[5])
+                    .email((String) row[6])
+                    .vatId((String) row[7])
+                    .orderCount(((Number) row[8]).longValue())
+                    .invoiceCount(((Number) row[9]).longValue())
+                    .openReqCount(((Number) row[10]).longValue())
+                    .totalRevenue(((Number) row[11]).doubleValue())
+                    .build());
+        }
+        return list;
+    }
+
+    @Transactional(readOnly = true)
+    public Customer getCustomer(String customerNumber) {
+        return customerRepository.findById(customerNumber)
+                .orElseThrow(() -> new AuthException(
+                        HttpStatus.NOT_FOUND,
+                        AuthErrorCodes.CUSTOMER_NOT_FOUND,
+                        "Customer not found with number: " + customerNumber
+                ));
     }
 }

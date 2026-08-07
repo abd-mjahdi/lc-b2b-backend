@@ -98,13 +98,14 @@ class OrderServiceTest {
                 .invoice(invoice)
                 .build();
 
-        when(orderRepository.findByCustomerCustomerNumberOrderByOrderDateDesc("CUST0001"))
-                .thenReturn(List.of(order));
+        org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
+        when(orderRepository.findFilteredOrders("CUST0001", null, null, null, pageable))
+                .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(order)));
 
-        List<OrderResponseDto> result = orderService.getOrdersForCurrentUser();
+        org.springframework.data.domain.Page<OrderResponseDto> result = orderService.getOrdersForCurrentUser(null, null, null, pageable);
 
-        assertThat(result).hasSize(1);
-        OrderResponseDto dto = result.get(0);
+        assertThat(result.getContent()).hasSize(1);
+        OrderResponseDto dto = result.getContent().get(0);
         assertThat(dto.orderNumber()).isEqualTo("4500010001");
         assertThat(dto.invoiceNumber()).isEqualTo("900010001");
         assertThat(dto.invoiceStatus()).isEqualTo("paid");

@@ -34,8 +34,13 @@ public class OrderController {
             @ApiResponse(responseCode = "400", description = "Aucun numéro client associé")
     })
     @GetMapping
-    public ResponseEntity<List<OrderResponseDto>> getOrders() {
-        List<OrderResponseDto> orders = orderService.getOrdersForCurrentUser();
+    public ResponseEntity<org.springframework.data.domain.Page<OrderResponseDto>> getOrders(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String status,
+            @org.springframework.data.web.PageableDefault(size = 10) org.springframework.data.domain.Pageable pageable) {
+        
+        org.springframework.data.domain.Page<OrderResponseDto> orders = orderService.getOrdersForCurrentUser(startDate, endDate, status, pageable);
         return ResponseEntity.ok(orders);
     }
 

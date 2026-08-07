@@ -29,6 +29,7 @@ import org.springframework.web.bind.annotation.PathVariable;
 public class AdminUserController {
 
     private final AdminUserRegistrationService adminUserRegistrationService;
+    private final com.lesieurcristal.b2bportal.order.service.OrderService orderService;
 
     @Operation(summary = "Création d'un compte client par l'administrateur", description = "Crée un compte client associé à un numéro client SAP et génère un jeton d'activation.")
     @ApiResponses(value = {
@@ -48,5 +49,43 @@ public class AdminUserController {
             @RequestBody(required = false) SendActivationEmailRequest request
     ) {
         return adminUserRegistrationService.sendActivationEmail(userId, request);
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping
+    public java.util.List<com.lesieurcristal.b2bportal.auth.dto.AuthUserResponse> getUsers(
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String customerNumber
+    ) {
+        return adminUserRegistrationService.getUsers(customerNumber);
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/{userId}/deactivate")
+    public com.lesieurcristal.b2bportal.auth.dto.AuthUserResponse deactivateUser(@PathVariable Long userId) {
+        return adminUserRegistrationService.deactivateUser(userId);
+    }
+
+    @org.springframework.web.bind.annotation.PostMapping("/{userId}/activate")
+    public com.lesieurcristal.b2bportal.auth.dto.AuthUserResponse activateUser(@PathVariable Long userId) {
+        return adminUserRegistrationService.activateUser(userId);
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/customers")
+    public java.util.List<com.lesieurcristal.b2bportal.auth.dto.CustomerAdminResponse> getAllCustomers() {
+        return adminUserRegistrationService.getAllCustomersWithStats();
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/customers/{customerNumber}")
+    public com.lesieurcristal.b2bportal.entity.erpmock.Customer getCustomer(@PathVariable String customerNumber) {
+        return adminUserRegistrationService.getCustomer(customerNumber);
+    }
+
+    @org.springframework.web.bind.annotation.GetMapping("/customers/{customerNumber}/orders")
+    public org.springframework.data.domain.Page<com.lesieurcristal.b2bportal.order.dto.OrderResponseDto> getCustomerOrders(
+            @PathVariable String customerNumber,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String status,
+            @org.springframework.data.web.PageableDefault(size = 10) org.springframework.data.domain.Pageable pageable) {
+        
+        return orderService.getOrdersForCustomer(customerNumber, startDate, endDate, status, pageable);
     }
 }

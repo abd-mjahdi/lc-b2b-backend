@@ -27,7 +27,7 @@ public class AuthenticatedUser implements UserDetails {
         this.passwordHash = user.getPasswordHash();
         this.role = user.getRole();
         this.customerNumber = UserAuthSupport.customerNumber(user);
-        this.active = UserAuthSupport.isActive(user);
+        this.active = UserAuthSupport.isActive(user) && !Boolean.TRUE.equals(user.getIsDeactivated());
     }
 
     @Override

@@ -42,6 +42,13 @@ public class AuthService {
 
     public LoginResponse login(LoginRequest request) {
         userRepository.findByLogin(request.login()).ifPresent(user -> {
+            if (Boolean.TRUE.equals(user.getIsDeactivated())) {
+                throw new AuthException(
+                        HttpStatus.FORBIDDEN,
+                        AuthErrorCodes.ACCOUNT_DEACTIVATED,
+                        "Your account has been deactivated. Please contact support."
+                );
+            }
             if (!UserAuthSupport.isActive(user)) {
                 throw new AuthException(
                         HttpStatus.FORBIDDEN,
@@ -106,6 +113,13 @@ public class AuthService {
         }
 
         User user = activationToken.getUser();
+        if (Boolean.TRUE.equals(user.getIsDeactivated())) {
+            throw new AuthException(
+                    HttpStatus.FORBIDDEN,
+                    AuthErrorCodes.ACCOUNT_DEACTIVATED,
+                    "This activation link belongs to a deactivated account."
+            );
+        }
         if (UserAuthSupport.isActive(user)) {
             throw new AuthException(
                     HttpStatus.CONFLICT,

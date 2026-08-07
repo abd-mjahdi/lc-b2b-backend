@@ -88,6 +88,10 @@ public class User {
     @Builder.Default
     private Boolean isActive = true;
 
+    @Column(name = "is_deactivated", nullable = false)
+    @Builder.Default
+    private Boolean isDeactivated = false;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

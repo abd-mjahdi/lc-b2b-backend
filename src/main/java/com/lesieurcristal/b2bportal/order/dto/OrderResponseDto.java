@@ -24,6 +24,7 @@ public record OrderResponseDto(
         LocalDate invoiceDate,
         String invoiceStatus,
         BigDecimal invoiceTotalAmount,
-        LocalDate invoiceDueDate
+        LocalDate invoiceDueDate,
+        String status
 ) {
 }

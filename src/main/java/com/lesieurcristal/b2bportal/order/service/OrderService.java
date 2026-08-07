@@ -26,7 +26,12 @@ public class OrderService {
     /**
      * Fetch order history for the currently logged-in customer.
      */
-    public List<OrderResponseDto> getOrdersForCurrentUser() {
+    public org.springframework.data.domain.Page<OrderResponseDto> getOrdersForCurrentUser(
+            java.time.LocalDate startDate,
+            java.time.LocalDate endDate,
+            String status,
+            org.springframework.data.domain.Pageable pageable) {
+        
         AuthenticatedUser currentUser = SecurityUtils.getCurrentUser()
                 .orElseThrow(OrderException::accessDenied);
 
@@ -35,7 +40,20 @@ public class OrderService {
             throw OrderException.noCustomerAssociated();
         }
 
-        return erpOrderConnector.getOrdersByCustomerNumber(customerNumber);
+        return erpOrderConnector.getOrdersByCustomerNumber(customerNumber, startDate, endDate, status, pageable);
+    }
+
+    /**
+     * Fetch order history for a specific customer (Admin use).
+     */
+    public org.springframework.data.domain.Page<OrderResponseDto> getOrdersForCustomer(
+            String customerNumber,
+            java.time.LocalDate startDate,
+            java.time.LocalDate endDate,
+            String status,
+            org.springframework.data.domain.Pageable pageable) {
+        
+        return erpOrderConnector.getOrdersByCustomerNumber(customerNumber, startDate, endDate, status, pageable);
     }
 
     /**
