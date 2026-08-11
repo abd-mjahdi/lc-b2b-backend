@@ -38,17 +38,19 @@ VALUES
     ('CUST0005', 'Cash Food Distribution SARL', 'Route d''Immouzer, Zone Commerciale',              'Fès',        'Maroc', '+212535778899', 'contact@cashfood.ma',             'IF50678901', '2026-01-15 08:00:00+01', '2026-01-15 08:00:00+01');
 
 -- ----------------------------------------------------------------------------
--- 2. app.products  (shared catalog)
+-- 2. app.products  (shared catalog — enrichi avec is_sampleable + prix)
 -- ----------------------------------------------------------------------------
 INSERT INTO app.products
-    (code, name, category, description, created_at, updated_at)
+    (code, name, category, description, is_sampleable, max_sample_quantity, unit_price, sales_unit, image_url, created_at, updated_at)
 VALUES
-    ('HTO-001', 'Huile de tournesol Lesieur 1L',              'Huiles de table', 'Carton de 12 bouteilles de 1L.',            '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
-    ('HTO-005', 'Huile de tournesol Lesieur 5L',               'Huiles de table', 'Carton de 4 bidons de 5L.',                 '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
-    ('HOL-001', 'Huile d''olive Lesieur Extra Vierge 1L',      'Huiles d''olive', 'Carton de 12 bouteilles de 1L.',            '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
-    ('HME-002', 'Huile de mélange Lesieur 2L',                 'Huiles de table', 'Carton de 6 bidons de 2L.',                 '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
-    ('MAR-250', 'Margarine Lesieur 250g',                      'Margarines',      'Carton de 24 unités de 250g.',              '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
-    ('SAV-500', 'Savon de Marseille Lesieur 500g',             'Savons',          'Carton de 20 unités de 500g.',              '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01');
+    ('HTO-001', 'Huile de tournesol Lesieur 1L',           'Huiles de table', 'Carton de 12 bouteilles de 1L.',  true,  24.000,  144.00, 'CAR', '/static/products/huile-tournesol-1L.jpg',   '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
+    ('HTO-005', 'Huile de tournesol Lesieur 5L',           'Huiles de table', 'Carton de 4 bidons de 5L.',        true,  16.000,  220.00, 'CAR', '/static/products/huile-tournesol-5L.jpg',   '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
+    ('HOL-001', 'Huile d''olive Lesieur Extra Vierge 1L',  'Huiles d''olive', 'Carton de 12 bouteilles de 1L.',  true,  24.000,  780.00, 'CAR', '/static/products/huile-olive-1L.jpg',       '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
+    ('HME-002', 'Huile de mélange Lesieur 2L',             'Huiles de table', 'Carton de 6 bidons de 2L.',        true,  12.000,  240.00, 'CAR', '/static/products/huile-melange-2L.jpg',     '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
+    ('MAR-250', 'Margarine Lesieur 250g',                  'Margarines',      'Carton de 24 unités de 250g.',     true,  48.000,  192.00, 'CAR', '/static/products/margarine-250g.jpg',       '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
+    ('SAV-500', 'Savon de Marseille Lesieur 500g',         'Savons',          'Carton de 20 unités de 500g.',     true,  40.000,  300.00, 'CAR', '/static/products/savon-marseille-500g.jpg', '2026-01-10 08:00:00+01', '2026-01-10 08:00:00+01'),
+    ('HTC-002', 'Huile d''olive Al Horra 2L',              'Huiles d''olive', 'Carton de 6 bidons de 2L.',        true,  12.000,  420.00, 'CAR', '/static/products/al-horra-2L.jpg',          '2026-08-01 08:00:00+01', '2026-08-01 08:00:00+01'),
+    ('SAV-300', 'Savon d''olive Lesieur 300g',             'Savons',          'Carton de 30 unités de 300g.',     true,  60.000,  180.00, 'CAR', '/static/products/savon-olive-300g.jpg',     '2026-08-01 08:00:00+01', '2026-08-01 08:00:00+01');
 
 -- ----------------------------------------------------------------------------
 -- 3. app.users  (2 admins provisioned pre-launch, 5 client accounts)

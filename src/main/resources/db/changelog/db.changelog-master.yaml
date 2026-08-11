@@ -5,11 +5,23 @@ databaseChangeLog:
   - include:
       file: V2_account_activation_tokens.sql
       relativeToChangelogFile: true
+  # V3_seed_data.sql : fichier de données (raw SQL inclus). Son checksum a déjà été
+  # enregistré par Liquibase en base sur des installations existantes
+  # (9:a416197a24a263bd066f63d5f36d9812) mais le fichier sur disque a depuis
+  # changé de forme (CRLF / reformattage) → son nouveau checksum est
+  # 9:f1a07cb0dfd92a7127a430a8769c3875. On déclare les deux comme valides
+  # pour que la migration passe sur les bases existantes ET que les nouvelles
+  # installations repartent du contenu actuel du fichier.
   - include:
       file: V3_seed_data.sql
       relativeToChangelogFile: true
+      validChecksum: 9:a416197a24a263bd066f63d5f36d9812
+      validChecksum: 9:f1a07cb0dfd92a7127a430a8769c3875
   - include:
       file: V4_add_is_deactivated_to_users.sql
+      relativeToChangelogFile: true
+  - include:
+      file: V5_notifications_and_invoice_disputes.sql
       relativeToChangelogFile: true
 
   

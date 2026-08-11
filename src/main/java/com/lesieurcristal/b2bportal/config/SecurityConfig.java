@@ -46,6 +46,11 @@ public class SecurityConfig {
                 .exceptionHandling(ex -> ex
                         .authenticationEntryPoint(authenticationEntryPoint)
                         .accessDeniedHandler(accessDeniedHandler))
+                .headers(headers -> headers
+                        .contentTypeOptions(Customizer.withDefaults())
+                        // SSE ne fonctionne pas derrière X-Frame-Options stricte,
+                        // on garde le comportement par défaut.
+                )
                 .authorizeHttpRequests(auth -> auth
                         .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
                         .requestMatchers(PUBLIC_ENDPOINTS).permitAll()

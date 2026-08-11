@@ -14,9 +14,15 @@ import lombok.ToString;
 import org.hibernate.annotations.CreationTimestamp;
 import org.hibernate.annotations.UpdateTimestamp;
 
+import java.math.BigDecimal;
 import java.time.OffsetDateTime;
 
-/** Static catalogue used by quotation and sample requests. */
+/**
+ * Catalogue statique utilisé par les devis, les échantillons et les
+ * commandes. Depuis le PRD §2.1, chaque produit porte un drapeau
+ * {@code isSampleable} pour indiquer qu'il peut être demandé comme
+ * échantillon, ainsi qu'une quantité maximale autorisée en échantillon.
+ */
 @Entity
 @Table(name = "products", schema = "app")
 @Getter
@@ -43,6 +49,27 @@ public class Product {
 
     @Column(name = "description", columnDefinition = "TEXT")
     private String description;
+
+    @ToString.Include
+    @Column(name = "is_sampleable", nullable = false)
+    @Builder.Default
+    private Boolean isSampleable = false;
+
+    /** Quantité maximale qu'un client peut demander en échantillon. */
+    @Column(name = "max_sample_quantity", precision = 14, scale = 3)
+    private BigDecimal maxSampleQuantity;
+
+    /** Prix unitaire de vente (référence catalogue). */
+    @Column(name = "unit_price", precision = 14, scale = 2)
+    private BigDecimal unitPrice;
+
+    /** Unité de vente : CAR (carton), BTL (bouteille), etc. */
+    @Column(name = "sales_unit", length = 10)
+    private String salesUnit;
+
+    /** URL d'image produit pour le catalogue. */
+    @Column(name = "image_url", length = 500)
+    private String imageUrl;
 
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)

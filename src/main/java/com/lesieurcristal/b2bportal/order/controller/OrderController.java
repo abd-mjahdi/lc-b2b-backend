@@ -1,7 +1,9 @@
 package com.lesieurcristal.b2bportal.order.controller;
 
+import com.lesieurcristal.b2bportal.order.dto.CreateOrderRequestDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderStatusResponseDto;
+import com.lesieurcristal.b2bportal.order.dto.OrderSubmissionResponseDto;
 import com.lesieurcristal.b2bportal.order.service.OrderService;
 import com.lesieurcristal.b2bportal.config.OpenApiConfig;
 import io.swagger.v3.oas.annotations.Operation;
@@ -10,24 +12,43 @@ import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
+import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.ResponseEntity;
+import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
+import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 
-import java.util.List;
-
-@Tag(name = "Commandes", description = "Endpoints de consultation des commandes et de leur statut en direct")
+@Tag(name = "Commandes", description = "Endpoints de gestion et consultation des commandes")
 @SecurityRequirement(name = OpenApiConfig.SECURITY_SCHEME_NAME)
+@org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 @RestController
 @RequestMapping("/api/orders")
 @RequiredArgsConstructor
 public class OrderController {
     private final OrderService orderService;
 
-    @Operation(summary = "Historique des commandes du client connecté", description = "Récupère la liste de toutes les commandes du client authentifié avec le statut de la facture associée.")
+    @Operation(summary = "Soumettre une nouvelle commande",
+            description = "Crée la commande et lie éventuellement des échantillons groupés. Déclenche une notification admin.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Commande créée"),
+            @ApiResponse(responseCode = "400", description = "Données invalides ou produit inexistant"),
+            @ApiResponse(responseCode = "401", description = "Non authentifié")
+    })
+    @PreAuthorize("hasRole('CLIENT')")
+    @PostMapping
+    public ResponseEntity<OrderSubmissionResponseDto> submitOrder(
+            @Valid @RequestBody CreateOrderRequestDto dto) {
+        return ResponseEntity.ok(orderService.submitOrder(dto));
+    }
+
+    @Operation(summary = "Historique des commandes du client connecté",
+            description = "Récupère la liste de toutes les commandes du client authentifié avec le statut de la facture associée.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Liste des commandes récupérée avec succès"),
             @ApiResponse(responseCode = "401", description = "Utilisateur non authentifié"),
@@ -35,18 +56,19 @@ public class OrderController {
     })
     @GetMapping
     public ResponseEntity<org.springframework.data.domain.Page<OrderResponseDto>> getOrders(
-            @org.springframework.web.bind.annotation.RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
-            @org.springframework.web.bind.annotation.RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
-            @org.springframework.web.bind.annotation.RequestParam(required = false) String status,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
+            @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @RequestParam(required = false) String status,
             @org.springframework.data.web.PageableDefault(size = 10) org.springframework.data.domain.Pageable pageable) {
-        
+
         org.springframework.data.domain.Page<OrderResponseDto> orders = orderService.getOrdersForCurrentUser(startDate, endDate, status, pageable);
         return ResponseEntity.ok(orders);
     }
 
-    @Operation(summary = "Statut en direct d'une commande", description = "Récupère le statut en direct (transporteur, livraison prévue, statut courant) d'une commande spécifiée par son numéro.")
+    @Operation(summary = "Statut en direct d'une commande",
+            description = "Récupère le statut en direct (transporteur, livraison prévue, statut courant) d'une commande spécifiée par son numéro.")
     @ApiResponses(value = {
-            @ApiResponse(responseCode = "200", description = "Statut de la commande récupéré avec succès"),
+            @ApiResponse(responseCode = "200", description = "Statut de la commande récupérée avec succès"),
             @ApiResponse(responseCode = "401", description = "Utilisateur non authentifié"),
             @ApiResponse(responseCode = "404", description = "Commande introuvable ou n'appartenant pas au client")
     })

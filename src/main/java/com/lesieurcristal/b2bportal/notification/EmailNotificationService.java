@@ -95,6 +95,7 @@ public class EmailNotificationService implements NotificationService {
 
         } catch (Exception ex) {
             log.error("[EMAIL SERVICE] Failed to send email to {}: {}", email.recipientEmail(), ex.getMessage(), ex);
+            throw new RuntimeException("Failed to send activation email", ex);
         }
     }
 }

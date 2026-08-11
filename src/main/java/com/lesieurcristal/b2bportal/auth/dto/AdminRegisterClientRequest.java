@@ -7,6 +7,7 @@ import jakarta.validation.constraints.Size;
 
 public record AdminRegisterClientRequest(
         @NotBlank @Size(max = 20) String customerNumber,
+        @NotBlank @Size(max = 100) String companyName,
         @NotBlank @Size(max = 100) String lastName,
         @NotBlank @Size(max = 100) String firstName,
         @NotBlank @Email @Size(max = 150) String email,

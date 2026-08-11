@@ -44,7 +44,7 @@ public class AdminUserRegistrationService {
                 .orElseGet(() -> {
                     Customer newCustomer = Customer.builder()
                             .customerNumber(request.customerNumber())
-                            .companyName("Entreprise " + request.customerNumber())
+                            .companyName(request.companyName())
                             .city("Casablanca")
                             .country("Maroc")
                             .build();
