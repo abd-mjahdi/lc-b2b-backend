@@ -1,12 +1,14 @@
 -- ============================================================================
--- V2__seed_data.sql — Lesieur Cristal B2B Portal
--- Logical, referentially-consistent seed data for erp_mock + app schemas.
--- Safe to re-run in dev: wipes existing rows first.
+-- V3_seed_data.sql — Lesieur Cristal B2B Portal
+-- Demo seed data for erp_mock + app schemas.
+-- Runs LAST (after V4/V5 schema migrations). Safe to re-run in dev: wipes first.
 -- ============================================================================
 
 BEGIN;
 
 TRUNCATE TABLE
+    app.invoice_disputes,
+    app.notifications,
     app.certificates,
     app.static_documents,
     app.documents,
@@ -157,10 +159,10 @@ VALUES
 -- 10. app.sample_requests
 -- ----------------------------------------------------------------------------
 INSERT INTO app.sample_requests
-    (customer_number, user_id, product_type, quantity, contact_name, contact_address, status, resulting_order_number, requested_at)
+    (customer_number, user_id, product_code, product_type, quantity, contact_name, contact_address, status, resulting_order_number, linked_order_number, requested_at)
 VALUES
-    ('CUST0003', (SELECT id FROM app.users WHERE login = 'yidrissi'), 'Huile de mélange conditionnée 2L', 5, 'Youssef Idrissi', 'Zone Industrielle Sidi Ghanem, Marrakech', 'fulfilled', '4500010005', '2026-05-20 08:30:00+01'),
-    ('CUST0004', (SELECT id FROM app.users WHERE login = 'hchraibi'), 'Savon de Marseille 500g',          3, 'Hicham Chraibi',  'Route de Tétouan, Tanger',                 'new',       NULL,         '2026-07-18 12:00:00+01');
+    ('CUST0003', (SELECT id FROM app.users WHERE login = 'yidrissi'), 'HME-002', 'Huile de mélange conditionnée 2L', 5, 'Youssef Idrissi', 'Zone Industrielle Sidi Ghanem, Marrakech', 'fulfilled', '4500010005', '4500010005', '2026-05-20 08:30:00+01'),
+    ('CUST0004', (SELECT id FROM app.users WHERE login = 'hchraibi'), 'SAV-500', 'Savon de Marseille 500g',          3, 'Hicham Chraibi',  'Route de Tétouan, Tanger',                 'new',       NULL,         NULL,         '2026-07-18 12:00:00+01');
 
 -- ----------------------------------------------------------------------------
 -- 11. app.purchase_order_submissions
@@ -228,5 +230,26 @@ VALUES
      '{"country_of_origin": "Maroc", "hs_code": "1512.19"}'::jsonb,
      NULL,
      '2026-05-10 09:00:00+01');
+
+-- ----------------------------------------------------------------------------
+-- 17. app.invoice_disputes (demo — table created in V5)
+-- ----------------------------------------------------------------------------
+INSERT INTO app.invoice_disputes
+    (invoice_number, customer_number, user_id, reason, description, status, created_at)
+VALUES
+    ('900010002', 'CUST0001', (SELECT id FROM app.users WHERE login = 'aalami'), 'QUANTITY_DISCREPANCY',
+     'Écart constaté entre quantité facturée et bon de livraison pour la commande 4500010002.', 'PENDING', '2026-07-02 10:00:00+01');
+
+UPDATE erp_mock.invoices SET invoice_status = 'disputed' WHERE invoice_number = '900010002';
+
+-- ----------------------------------------------------------------------------
+-- 18. app.notifications (demo admin broadcast — table created in V5)
+-- ----------------------------------------------------------------------------
+INSERT INTO app.notifications
+    (recipient_user_id, recipient_role, title, message, type, related_entity_type, related_entity_id, target_url, is_read, created_at)
+VALUES
+    (NULL, 'ADMIN', 'Contestation de facture reçue',
+     'Facture #900010002 contestée par Épicerie Al Amal SARL (Client #CUST0001). Motif : Écart de quantité.',
+     'DISPUTE_OPENED', 'INVOICE_DISPUTE', '1', '/admin/disputes', false, '2026-07-02 10:00:00+01');
 
 COMMIT;

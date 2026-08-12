@@ -12,8 +12,8 @@
 ## Factures (`GET /api/invoices` + disputes exist — missing download)
 
 - [x] Add `GET /api/invoices/{invoiceNumber}` returning one invoice with order link, scoped to the connected client
-- [ ] Add OpenPDF or PDFBox dependency and a basic invoice PDF template
-- [ ] Add `GET /api/invoices/{invoiceNumber}/file` generating once, storing in `app.documents`, reusing on later calls, with customer isolation
+- [x] Add OpenPDF or PDFBox dependency and a basic invoice PDF template
+- [x] Add `GET /api/invoices/{invoiceNumber}/file` generating once, storing in `app.documents`, reusing on later calls, with customer isolation
 
 ## Rendez-vous (client `POST` + `GET` exist — admin side missing)
 

@@ -3,6 +3,7 @@ package com.lesieurcristal.b2bportal.invoice.controller;
 import com.lesieurcristal.b2bportal.config.OpenApiConfig;
 import com.lesieurcristal.b2bportal.entity.erpmock.Invoice;
 import com.lesieurcristal.b2bportal.entity.erpmock.Order;
+import com.lesieurcristal.b2bportal.invoice.service.InvoiceDocumentService;
 import com.lesieurcristal.b2bportal.repository.InvoiceRepository;
 import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
 import com.lesieurcristal.b2bportal.security.SecurityUtils;
@@ -13,7 +14,9 @@ import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -39,6 +42,7 @@ import java.util.List;
 public class InvoiceController {
 
     private final InvoiceRepository invoiceRepository;
+    private final InvoiceDocumentService invoiceDocumentService;
 
     @Operation(summary = "Liste des factures du client connecté")
     @GetMapping
@@ -86,6 +90,28 @@ public class InvoiceController {
         }
 
         return ResponseEntity.ok(InvoiceDetailDto.from(invoice));
+    }
+
+    @Operation(summary = "Télécharger le PDF d'une facture",
+            description = "Génère le PDF une seule fois, le stocke dans app.documents, "
+                    + "puis réutilise le fichier aux appels suivants. Isolé au client connecté.")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "PDF de la facture"),
+            @ApiResponse(responseCode = "400", description = "Aucun numéro client associé"),
+            @ApiResponse(responseCode = "401", description = "Non authentifié"),
+            @ApiResponse(responseCode = "404", description = "Facture introuvable ou hors périmètre")
+    })
+    @GetMapping("/{invoiceNumber}/file")
+    public ResponseEntity<byte[]> downloadInvoiceFile(
+            @Parameter(description = "Numéro de facture SAP (ex: 900010001)", required = true)
+            @PathVariable String invoiceNumber) {
+
+        InvoiceDocumentService.InvoiceFile file = invoiceDocumentService.downloadInvoicePdf(invoiceNumber);
+        return ResponseEntity.ok()
+                .header(HttpHeaders.CONTENT_DISPOSITION, "attachment; filename=\"" + file.filename() + "\"")
+                .contentType(MediaType.APPLICATION_PDF)
+                .contentLength(file.content().length)
+                .body(file.content());
     }
 
     public record InvoiceDto(

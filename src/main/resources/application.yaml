@@ -48,6 +48,9 @@ app:
     frontend-base-url: ${FRONTEND_BASE_URL}
     activation-path: ${ACTIVATION_PATH}
 
+  documents:
+    storage-dir: ${DOCUMENTS_STORAGE_DIR:./storage/documents}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

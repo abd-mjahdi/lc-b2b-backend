@@ -34,3 +34,6 @@ build/
 
 ### env vars ###
 .env
+
+### Generated invoice PDFs ###
+/storage/
