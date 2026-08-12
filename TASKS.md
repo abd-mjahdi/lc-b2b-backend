@@ -7,7 +7,7 @@
 
 ## Profil client (`GET /api/customers/me` exists — missing update)
 
-- [ ] Add `PUT /api/customers/me` to update allowed `erp_mock.customers` fields and log each change in `app.client_change_log`
+- [x] Add `PUT /api/customers/me` to update allowed `erp_mock.customers` fields and log each change in `app.client_change_log`
 
 ## Factures (`GET /api/invoices` + disputes exist — missing download)
 
