@@ -16,6 +16,18 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     @Query("SELECT o FROM Order o LEFT JOIN FETCH o.invoice WHERE o.orderNumber = :orderNumber")
     Optional<Order> findByOrderNumberWithInvoice(@Param("orderNumber") String orderNumber);
 
+    @Query("SELECT o FROM Order o LEFT JOIN FETCH o.invoice LEFT JOIN FETCH o.orderStatus "
+            + "WHERE o.orderNumber = :orderNumber")
+    Optional<Order> findByOrderNumberWithInvoiceAndStatus(@Param("orderNumber") String orderNumber);
+
+    @Query("SELECT o FROM Order o LEFT JOIN FETCH o.invoice LEFT JOIN FETCH o.orderStatus "
+            + "WHERE o.customer.customerNumber = :customerNumber "
+            + "AND o.customerOrderReference = :customerOrderReference "
+            + "ORDER BY o.orderNumber ASC")
+    List<Order> findByCustomerNumberAndCustomerOrderReference(
+            @Param("customerNumber") String customerNumber,
+            @Param("customerOrderReference") String customerOrderReference);
+
     @Query(value = "SELECT o FROM Order o LEFT JOIN FETCH o.invoice i LEFT JOIN FETCH o.orderStatus os WHERE " +
             "o.customer.customerNumber = :customerNumber " +
             "AND (cast(:startDate as date) IS NULL OR o.orderDate >= :startDate) " +

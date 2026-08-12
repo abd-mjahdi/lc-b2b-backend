@@ -5,15 +5,18 @@ import com.lesieurcristal.b2bportal.entity.app.SampleRequest;
 import com.lesieurcristal.b2bportal.entity.app.User;
 import com.lesieurcristal.b2bportal.entity.app.enums.UserRole;
 import com.lesieurcristal.b2bportal.entity.erpmock.Customer;
+import com.lesieurcristal.b2bportal.entity.erpmock.Invoice;
 import com.lesieurcristal.b2bportal.entity.erpmock.Order;
 import com.lesieurcristal.b2bportal.entity.erpmock.OrderStatus;
 import com.lesieurcristal.b2bportal.notification.service.PortalNotificationService;
 import com.lesieurcristal.b2bportal.order.OrderException;
 import com.lesieurcristal.b2bportal.order.connector.ErpOrderConnector;
 import com.lesieurcristal.b2bportal.order.dto.CreateOrderRequestDto;
+import com.lesieurcristal.b2bportal.order.dto.OrderDetailDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderStatusResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderSubmissionResponseDto;
+import com.lesieurcristal.b2bportal.order.dto.UpdateOrderStatusDto;
 import com.lesieurcristal.b2bportal.repository.CustomerRepository;
 import com.lesieurcristal.b2bportal.repository.OrderRepository;
 import com.lesieurcristal.b2bportal.repository.OrderStatusRepository;
@@ -86,22 +89,205 @@ public class OrderService {
      * Fetch live status for a specific order. Enforces data isolation between clients.
      */
     public OrderStatusResponseDto getOrderStatus(String orderNumber) {
+        Order order = loadOrderForCurrentUser(orderNumber);
+        return erpOrderConnector.getOrderStatus(order.getOrderNumber())
+                .orElseThrow(() -> OrderException.notFound(orderNumber));
+    }
+
+    /**
+     * Détail complet d'une commande : lignes, résumé facture, statut live.
+     * Client = ses commandes uniquement ; admin = toutes.
+     */
+    public OrderDetailDto getOrderDetail(String orderNumber) {
+        Order order = loadOrderForCurrentUser(orderNumber);
+        return toOrderDetailDto(order);
+    }
+
+    /**
+     * [Admin] Met à jour {@code erp_mock.order_status} et notifie le(s) utilisateur(s) client.
+     */
+    @Transactional
+    public OrderStatusResponseDto updateOrderStatus(String orderNumber, UpdateOrderStatusDto dto) {
+        Order order = orderRepository.findByOrderNumberWithInvoiceAndStatus(orderNumber)
+                .orElseThrow(() -> OrderException.notFound(orderNumber));
+
+        OrderStatus status = orderStatusRepository.findByOrderNumber(orderNumber)
+                .orElseGet(() -> OrderStatus.builder()
+                        .order(order)
+                        .orderNumber(orderNumber)
+                        .build());
+
+        String oldStatus = status.getCurrentStatus();
+        status.setCurrentStatus(dto.status());
+        status.setStatusUpdatedAt(OffsetDateTime.now());
+        if (dto.expectedDeliveryDate() != null) {
+            status.setExpectedDeliveryDate(dto.expectedDeliveryDate());
+        }
+        if (dto.carrierName() != null) {
+            status.setCarrierName(dto.carrierName());
+        }
+        if (dto.carrierReference() != null) {
+            status.setCarrierReference(dto.carrierReference());
+        }
+
+        OrderStatus saved = orderStatusRepository.save(status);
+
+        notifyClientOfStatusChange(order, oldStatus, saved.getCurrentStatus());
+
+        return new OrderStatusResponseDto(
+                saved.getOrderNumber(),
+                saved.getCurrentStatus(),
+                saved.getStatusUpdatedAt(),
+                saved.getExpectedDeliveryDate(),
+                saved.getCarrierName(),
+                saved.getCarrierReference()
+        );
+    }
+
+    private Order loadOrderForCurrentUser(String orderNumber) {
         AuthenticatedUser currentUser = SecurityUtils.getCurrentUser()
                 .orElseThrow(OrderException::accessDenied);
 
-        Order order = orderRepository.findByOrderNumberWithInvoice(orderNumber)
+        Order order = orderRepository.findByOrderNumberWithInvoiceAndStatus(orderNumber)
                 .orElseThrow(() -> OrderException.notFound(orderNumber));
 
-        // Data isolation check: client can only view status of their own orders
         if (currentUser.getRole() == UserRole.CLIENT) {
             String currentUserCustomerNumber = currentUser.getCustomerNumber();
-            if (order.getCustomer() == null || !order.getCustomer().getCustomerNumber().equals(currentUserCustomerNumber)) {
+            if (order.getCustomer() == null
+                    || !order.getCustomer().getCustomerNumber().equals(currentUserCustomerNumber)) {
                 throw OrderException.notFound(orderNumber);
             }
         }
+        return order;
+    }
 
-        return erpOrderConnector.getOrderStatus(orderNumber)
-                .orElseThrow(() -> OrderException.notFound(orderNumber));
+    private void notifyClientOfStatusChange(Order order, String oldStatus, String newStatus) {
+        if (order.getCustomer() == null) {
+            return;
+        }
+        String customerNumber = order.getCustomer().getCustomerNumber();
+        List<User> recipients = userRepository.findByCustomer_CustomerNumber(customerNumber);
+        String title = "Mise à jour de votre commande";
+        String message = String.format(
+                "Votre commande #%s est passée de « %s » à « %s ».",
+                order.getOrderNumber(),
+                translateOrderStatus(oldStatus),
+                translateOrderStatus(newStatus));
+        String targetUrl = "/client/orders/" + order.getOrderNumber();
+
+        for (User recipient : recipients) {
+            portalNotificationService.createNotificationForUser(
+                    recipient,
+                    title,
+                    message,
+                    "ORDER_STATUS_CHANGED",
+                    "ORDER",
+                    order.getOrderNumber(),
+                    targetUrl
+            );
+        }
+    }
+
+    private OrderDetailDto toOrderDetailDto(Order order) {
+        String customerNumber = order.getCustomer() != null
+                ? order.getCustomer().getCustomerNumber()
+                : null;
+
+        List<Order> lines;
+        String reference = order.getCustomerOrderReference();
+        if (customerNumber != null && reference != null && !reference.isBlank()) {
+            lines = orderRepository.findByCustomerNumberAndCustomerOrderReference(customerNumber, reference);
+            if (lines.isEmpty()) {
+                lines = List.of(order);
+            }
+        } else {
+            lines = List.of(order);
+        }
+
+        BigDecimal totalNet = lines.stream()
+                .map(Order::getNetAmount)
+                .filter(a -> a != null)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        String currency = lines.stream()
+                .map(Order::getCurrency)
+                .filter(c -> c != null && !c.isBlank())
+                .findFirst()
+                .orElse(order.getCurrency());
+
+        List<OrderDetailDto.OrderLineDetailDto> lineDtos = lines.stream()
+                .map(line -> new OrderDetailDto.OrderLineDetailDto(
+                        line.getOrderNumber(),
+                        line.getProductCode(),
+                        line.getProductLabel(),
+                        line.getQuantityOrdered(),
+                        line.getQuantityShipped(),
+                        line.getSalesUnit(),
+                        line.getNetAmount(),
+                        line.getCurrency()
+                ))
+                .toList();
+
+        Invoice invoice = order.getInvoice();
+        OrderDetailDto.InvoiceSummaryDto invoiceSummary = null;
+        if (invoice != null) {
+            invoiceSummary = new OrderDetailDto.InvoiceSummaryDto(
+                    invoice.getInvoiceNumber(),
+                    invoice.getInvoiceDate(),
+                    invoice.getInvoiceStatus(),
+                    invoice.getNetAmount(),
+                    invoice.getVatAmount(),
+                    invoice.getTotalAmount(),
+                    invoice.getCurrency(),
+                    invoice.getDueDate(),
+                    invoice.getPaymentDate()
+            );
+        }
+
+        OrderStatus status = order.getOrderStatus();
+        OrderStatusResponseDto statusDto = null;
+        if (status != null) {
+            statusDto = new OrderStatusResponseDto(
+                    status.getOrderNumber(),
+                    status.getCurrentStatus(),
+                    status.getStatusUpdatedAt(),
+                    status.getExpectedDeliveryDate(),
+                    status.getCarrierName(),
+                    status.getCarrierReference()
+            );
+        } else {
+            statusDto = erpOrderConnector.getOrderStatus(order.getOrderNumber()).orElse(null);
+        }
+
+        return new OrderDetailDto(
+                order.getOrderNumber(),
+                order.getOrderDate(),
+                customerNumber,
+                order.getCustomerOrderReference(),
+                order.getShipToCity(),
+                order.getShipToCountry(),
+                order.getRequestedDeliveryDate(),
+                order.getPlannedDeliveryDate(),
+                order.getGoodsIssueDate(),
+                totalNet,
+                currency,
+                lineDtos,
+                invoiceSummary,
+                statusDto
+        );
+    }
+
+    private static String translateOrderStatus(String status) {
+        if (status == null) {
+            return "";
+        }
+        return switch (status) {
+            case "confirmed" -> "Confirmée";
+            case "in_preparation" -> "En préparation";
+            case "shipped" -> "Expédiée";
+            case "delivered" -> "Livrée";
+            case "cancelled" -> "Annulée";
+            default -> status;
+        };
     }
 
     // =========================================================================

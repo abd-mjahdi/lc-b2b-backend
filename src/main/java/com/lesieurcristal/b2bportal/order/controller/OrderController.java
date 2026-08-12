@@ -1,6 +1,7 @@
 package com.lesieurcristal.b2bportal.order.controller;
 
 import com.lesieurcristal.b2bportal.order.dto.CreateOrderRequestDto;
+import com.lesieurcristal.b2bportal.order.dto.OrderDetailDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderStatusResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderSubmissionResponseDto;
@@ -63,6 +64,21 @@ public class OrderController {
 
         org.springframework.data.domain.Page<OrderResponseDto> orders = orderService.getOrdersForCurrentUser(startDate, endDate, status, pageable);
         return ResponseEntity.ok(orders);
+    }
+
+    @Operation(summary = "Détail complet d'une commande",
+            description = "Retourne les lignes produit, le résumé de facture et le statut logistique live. "
+                    + "Un client ne peut consulter que ses propres commandes ; un admin peut tout consulter.")
+    @ApiResponses(value = {
+            @ApiResponse(responseCode = "200", description = "Détail récupéré"),
+            @ApiResponse(responseCode = "401", description = "Non authentifié"),
+            @ApiResponse(responseCode = "404", description = "Commande introuvable ou n'appartenant pas au client")
+    })
+    @GetMapping("/{orderNumber}")
+    public ResponseEntity<OrderDetailDto> getOrderDetail(
+            @Parameter(description = "Numéro de la commande SAP (ex: 4500010001)", required = true)
+            @PathVariable String orderNumber) {
+        return ResponseEntity.ok(orderService.getOrderDetail(orderNumber));
     }
 
     @Operation(summary = "Statut en direct d'une commande",
