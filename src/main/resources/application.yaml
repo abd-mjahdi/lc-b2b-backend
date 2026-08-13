@@ -41,7 +41,8 @@ app:
 
   cors:
     allowed-origins:
-      - ${CORS_ALLOWED_ORIGIN}
+      - ${CORS_ALLOWED_ORIGIN:http://localhost:3000}
+      - ${CORS_ALLOWED_ORIGIN_IP:http://172.16.125.69:3000}
 
   activation:
     token-expiration-ms: ${ACTIVATION_TOKEN_EXPIRATION_MS}
