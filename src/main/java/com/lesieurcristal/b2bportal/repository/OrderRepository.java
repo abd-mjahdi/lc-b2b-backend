@@ -21,27 +21,33 @@ public interface OrderRepository extends JpaRepository<Order, String> {
     Optional<Order> findByOrderNumberWithInvoiceAndStatus(@Param("orderNumber") String orderNumber);
 
     @Query("SELECT o FROM Order o LEFT JOIN FETCH o.invoice LEFT JOIN FETCH o.orderStatus "
-            + "WHERE o.customer.customerNumber = :customerNumber "
-            + "AND o.customerOrderReference = :customerOrderReference "
+            + "WHERE o.orderGroupId = :orderGroupId "
             + "ORDER BY o.orderNumber ASC")
-    List<Order> findByCustomerNumberAndCustomerOrderReference(
-            @Param("customerNumber") String customerNumber,
-            @Param("customerOrderReference") String customerOrderReference);
+    List<Order> findByOrderGroupIdWithInvoiceAndStatus(@Param("orderGroupId") String orderGroupId);
+
+    boolean existsByCustomer_CustomerNumberAndCustomerOrderReference(
+            String customerNumber, String customerOrderReference);
+
+    @Query(value = "SELECT nextval('erp_mock.order_number_seq')", nativeQuery = true)
+    Long nextOrderNumberSeq();
 
     @Query(value = "SELECT o FROM Order o LEFT JOIN FETCH o.invoice i LEFT JOIN FETCH o.orderStatus os WHERE " +
             "o.customer.customerNumber = :customerNumber " +
             "AND (cast(:startDate as date) IS NULL OR o.orderDate >= :startDate) " +
             "AND (cast(:endDate as date) IS NULL OR o.orderDate <= :endDate) " +
-            "AND (:status IS NULL OR os.currentStatus = :status)",
-            countQuery = "SELECT count(o) FROM Order o LEFT JOIN o.orderStatus os WHERE " +
+            "AND (:status IS NULL OR os.currentStatus = :status) " +
+            "AND (:invoiceStatus IS NULL OR i.invoiceStatus = :invoiceStatus)",
+            countQuery = "SELECT count(o) FROM Order o LEFT JOIN o.orderStatus os LEFT JOIN o.invoice i WHERE " +
             "o.customer.customerNumber = :customerNumber " +
             "AND (cast(:startDate as date) IS NULL OR o.orderDate >= :startDate) " +
             "AND (cast(:endDate as date) IS NULL OR o.orderDate <= :endDate) " +
-            "AND (:status IS NULL OR os.currentStatus = :status)")
+            "AND (:status IS NULL OR os.currentStatus = :status) " +
+            "AND (:invoiceStatus IS NULL OR i.invoiceStatus = :invoiceStatus)")
     org.springframework.data.domain.Page<Order> findFilteredOrders(
             @Param("customerNumber") String customerNumber,
             @Param("startDate") java.time.LocalDate startDate,
             @Param("endDate") java.time.LocalDate endDate,
             @Param("status") String status,
+            @Param("invoiceStatus") String invoiceStatus,
             org.springframework.data.domain.Pageable pageable);
 }

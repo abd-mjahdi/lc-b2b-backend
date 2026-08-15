@@ -3,7 +3,6 @@ package com.lesieurcristal.b2bportal.order.connector;
 import com.lesieurcristal.b2bportal.order.dto.OrderResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderStatusResponseDto;
 
-import java.util.List;
 import java.util.Optional;
 
 public interface ErpOrderConnector {
@@ -14,7 +13,8 @@ public interface ErpOrderConnector {
      * @param customerNumber customer identification number in ERP
      * @param startDate filter orders from this date
      * @param endDate filter orders to this date
-     * @param status filter by invoice status
+     * @param status logistics status ({@code order_status.currentStatus})
+     * @param invoiceStatus payment status ({@code invoices.invoice_status})
      * @param pageable pagination and sorting information
      * @return paginated list of orders for the specified customer
      */
@@ -23,6 +23,7 @@ public interface ErpOrderConnector {
             java.time.LocalDate startDate,
             java.time.LocalDate endDate,
             String status,
+            String invoiceStatus,
             org.springframework.data.domain.Pageable pageable);
 
     /**

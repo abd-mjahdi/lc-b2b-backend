@@ -84,8 +84,10 @@ public class AdminUserController {
             @org.springframework.web.bind.annotation.RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
             @org.springframework.web.bind.annotation.RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
             @org.springframework.web.bind.annotation.RequestParam(required = false) String status,
+            @org.springframework.web.bind.annotation.RequestParam(required = false) String invoiceStatus,
             @org.springframework.data.web.PageableDefault(size = 10) org.springframework.data.domain.Pageable pageable) {
         
-        return orderService.getOrdersForCustomer(customerNumber, startDate, endDate, status, pageable);
+        return orderService.getOrdersForCustomer(
+                customerNumber, startDate, endDate, status, invoiceStatus, pageable);
     }
 }

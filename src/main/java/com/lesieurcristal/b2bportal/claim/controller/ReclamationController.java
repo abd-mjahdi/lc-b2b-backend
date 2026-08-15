@@ -39,7 +39,7 @@ public class ReclamationController {
     }
 
     @Operation(summary = "[Client] Liste mes réclamations")
-    @PreAuthorize("isAuthenticated()")
+    @PreAuthorize("hasRole('CLIENT')")
     @GetMapping("/claims/mine")
     public ResponseEntity<List<ReclamationResponseDto>> mine() {
         return ResponseEntity.ok(reclamationService.listForCurrentUser());

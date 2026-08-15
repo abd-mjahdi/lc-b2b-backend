@@ -26,6 +26,7 @@ public class MockErpOrderConnector implements ErpOrderConnector {
             java.time.LocalDate startDate,
             java.time.LocalDate endDate,
             String status,
+            String invoiceStatus,
             org.springframework.data.domain.Pageable pageable) {
 
         if (customerNumber == null || customerNumber.isBlank()) {
@@ -33,7 +34,7 @@ public class MockErpOrderConnector implements ErpOrderConnector {
         }
         
         org.springframework.data.domain.Page<Order> ordersPage = orderRepository.findFilteredOrders(
-                customerNumber, startDate, endDate, status, pageable);
+                customerNumber, startDate, endDate, status, invoiceStatus, pageable);
 
         return ordersPage.map(this::mapToOrderResponseDto);
     }

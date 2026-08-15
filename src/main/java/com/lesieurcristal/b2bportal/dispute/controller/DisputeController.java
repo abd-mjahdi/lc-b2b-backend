@@ -34,6 +34,7 @@ public class DisputeController {
     // -------- Espace client --------
 
     @Operation(summary = "[Client] Déclare une contestation sur une facture")
+    @PreAuthorize("hasRole('CLIENT')")
     @PostMapping("/{invoiceNumber}/dispute")
     public ResponseEntity<InvoiceDisputeResponseDto> declareDispute(
             @PathVariable String invoiceNumber,
@@ -43,12 +44,14 @@ public class DisputeController {
     }
 
     @Operation(summary = "[Client] Liste ses propres contestations")
+    @PreAuthorize("hasRole('CLIENT')")
     @GetMapping("/disputes/mine")
     public ResponseEntity<List<InvoiceDisputeResponseDto>> myDisputes() {
         return ResponseEntity.ok(disputeService.listForCurrentUser());
     }
 
     @Operation(summary = "[Client] Détail d'une de ses contestations")
+    @PreAuthorize("hasRole('CLIENT')")
     @GetMapping("/disputes/mine/{id}")
     public ResponseEntity<InvoiceDisputeResponseDto> getDispute(@PathVariable Long id) {
         return ResponseEntity.ok(disputeService.getByIdForCurrentUser(id));
@@ -70,7 +73,9 @@ public class DisputeController {
         return ResponseEntity.ok(disputeService.listAllForAdmin());
     }
 
-    @Operation(summary = "[Admin] Approuve une contestation (génère un avoir)")
+    @Operation(summary = "[Admin] Approuve une contestation",
+            description = "Clôture la contestation PENDING et restaure le statut de paiement de la facture. "
+                    + "La génération d'avoir n'est pas implémentée dans ce MVP.")
     @PreAuthorize("hasRole('ADMIN')")
     @PutMapping("/disputes/{id}/approve")
     public ResponseEntity<InvoiceDisputeResponseDto> approve(

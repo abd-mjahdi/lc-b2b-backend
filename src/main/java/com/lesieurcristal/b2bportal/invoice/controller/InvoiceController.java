@@ -1,6 +1,7 @@
 package com.lesieurcristal.b2bportal.invoice.controller;
 
 import com.lesieurcristal.b2bportal.config.OpenApiConfig;
+import com.lesieurcristal.b2bportal.entity.app.enums.UserRole;
 import com.lesieurcristal.b2bportal.entity.erpmock.Invoice;
 import com.lesieurcristal.b2bportal.entity.erpmock.Order;
 import com.lesieurcristal.b2bportal.invoice.service.InvoiceDocumentService;
@@ -54,7 +55,7 @@ public class InvoiceController {
             return ResponseEntity.ok(List.of());
         }
         List<InvoiceDto> result = invoiceRepository
-                .findByCustomer_CustomerNumberOrderByInvoiceDateDesc(current.getCustomerNumber())
+                .findByCustomer_CustomerNumberWithOrderOrderByInvoiceDateDesc(current.getCustomerNumber())
                 .stream()
                 .map(InvoiceDto::from)
                 .toList();
@@ -77,16 +78,18 @@ public class InvoiceController {
 
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Non authentifié"));
-        if (current.getCustomerNumber() == null || current.getCustomerNumber().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Aucun numéro client associé");
-        }
 
         Invoice invoice = invoiceRepository.findByInvoiceNumberWithOrder(invoiceNumber)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable"));
 
-        if (invoice.getCustomer() == null
-                || !current.getCustomerNumber().equals(invoice.getCustomer().getCustomerNumber())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable");
+        if (current.getRole() != UserRole.ADMIN) {
+            if (current.getCustomerNumber() == null || current.getCustomerNumber().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Aucun numéro client associé");
+            }
+            if (invoice.getCustomer() == null
+                    || !current.getCustomerNumber().equals(invoice.getCustomer().getCustomerNumber())) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable");
+            }
         }
 
         return ResponseEntity.ok(InvoiceDetailDto.from(invoice));

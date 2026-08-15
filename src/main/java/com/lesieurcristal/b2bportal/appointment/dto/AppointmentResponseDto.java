@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 public record AppointmentResponseDto(
         Long id,
         String customerNumber,
+        String companyName,
         Long userId,
         String subject,
         LocalDate requestedDate,
@@ -20,6 +21,7 @@ public record AppointmentResponseDto(
         return new AppointmentResponseDto(
                 a.getId(),
                 a.getCustomer() != null ? a.getCustomer().getCustomerNumber() : null,
+                a.getCustomer() != null ? a.getCustomer().getCompanyName() : null,
                 a.getUser() != null ? a.getUser().getId() : null,
                 a.getSubject(),
                 a.getRequestedDate(),

@@ -13,12 +13,15 @@ import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
 import com.lesieurcristal.b2bportal.security.SecurityUtils;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
+import java.util.Comparator;
 import java.util.List;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AppointmentService {
@@ -59,7 +62,7 @@ public class AppointmentService {
                 "APPOINTMENT_REQUESTED",
                 "APPOINTMENT",
                 persisted.getId().toString(),
-                "/admin/appointments"
+                "/admin/rendez-vous"
         );
         return AppointmentResponseDto.from(persisted);
     }
@@ -76,5 +79,101 @@ public class AppointmentService {
                 .stream()
                 .map(AppointmentResponseDto::from)
                 .toList();
+    }
+
+    @Transactional(readOnly = true)
+    public List<AppointmentResponseDto> listAllForAdmin(String customerNumber) {
+        List<AppointmentRequest> rows;
+        if (customerNumber != null && !customerNumber.isBlank()) {
+            rows = appointmentRepository
+                    .findByCustomer_CustomerNumberOrderByRequestedDateDesc(customerNumber.trim());
+        } else {
+            rows = appointmentRepository.findAll();
+            rows.sort(Comparator
+                    .comparing(AppointmentRequest::getRequestedDate,
+                            Comparator.nullsLast(Comparator.reverseOrder()))
+                    .thenComparing(AppointmentRequest::getId,
+                            Comparator.nullsLast(Comparator.reverseOrder())));
+        }
+        return rows.stream().map(AppointmentResponseDto::from).toList();
+    }
+
+    @Transactional
+    public AppointmentResponseDto confirm(Long id) {
+        AppointmentRequest apt = requirePending(id);
+        apt.setStatus("confirmed");
+        apt.setConfirmedAt(OffsetDateTime.now());
+        AppointmentRequest saved = appointmentRepository.save(apt);
+
+        notifyClient(
+                saved,
+                "Votre rendez-vous est confirmé",
+                String.format(
+                        "Votre rendez-vous du %s (%s) a été confirmé. Objet : %s.",
+                        saved.getRequestedDate(),
+                        saved.getRequestedTimeSlot(),
+                        saved.getSubject() != null ? saved.getSubject() : "—")
+        );
+        return AppointmentResponseDto.from(saved);
+    }
+
+    @Transactional
+    public AppointmentResponseDto cancel(Long id) {
+        AppointmentRequest apt = requirePending(id);
+        apt.setStatus("cancelled");
+        AppointmentRequest saved = appointmentRepository.save(apt);
+
+        notifyClient(
+                saved,
+                "Rendez-vous annulé",
+                String.format(
+                        "Votre demande de rendez-vous du %s (%s) a été annulée. Objet : %s.",
+                        saved.getRequestedDate(),
+                        saved.getRequestedTimeSlot(),
+                        saved.getSubject() != null ? saved.getSubject() : "—")
+        );
+        return AppointmentResponseDto.from(saved);
+    }
+
+    private AppointmentRequest requirePending(Long id) {
+        AppointmentRequest apt = appointmentRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Rendez-vous introuvable"));
+        if (!"pending".equals(apt.getStatus())) {
+            throw new IllegalStateException(
+                    "Seules les demandes en attente (pending) peuvent être tranchées. Statut actuel : "
+                            + apt.getStatus());
+        }
+        return apt;
+    }
+
+    private void notifyClient(AppointmentRequest apt, String title, String message) {
+        if (apt.getUser() != null) {
+            portalNotificationService.createNotificationForUser(
+                    apt.getUser(),
+                    title,
+                    message,
+                    "APPOINTMENT_STATUS_CHANGED",
+                    "APPOINTMENT",
+                    String.valueOf(apt.getId()),
+                    "/dashboard/rendez-vous"
+            );
+            return;
+        }
+        if (apt.getCustomer() == null) {
+            log.warn("Appointment {} updated but no user/customer to notify", apt.getId());
+            return;
+        }
+        for (User recipient : userRepository.findByCustomer_CustomerNumber(
+                apt.getCustomer().getCustomerNumber())) {
+            portalNotificationService.createNotificationForUser(
+                    recipient,
+                    title,
+                    message,
+                    "APPOINTMENT_STATUS_CHANGED",
+                    "APPOINTMENT",
+                    String.valueOf(apt.getId()),
+                    "/dashboard/rendez-vous"
+            );
+        }
     }
 }

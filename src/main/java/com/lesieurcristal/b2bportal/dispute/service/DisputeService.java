@@ -21,21 +21,22 @@ import org.springframework.transaction.annotation.Transactional;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Set;
 
 @Slf4j
 @Service
 @RequiredArgsConstructor
 public class DisputeService {
 
+    private static final Set<String> RESTORABLE_STATUSES = Set.of(
+            "paid", "unpaid", "partially_paid"
+    );
+
     private final InvoiceDisputeRepository disputeRepository;
     private final InvoiceRepository invoiceRepository;
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final PortalNotificationService portalNotificationService;
-
-    // =========================================================================
-    // Création client
-    // =========================================================================
 
     @Transactional
     public InvoiceDisputeResponseDto createDispute(String invoiceNumber,
@@ -50,14 +51,21 @@ public class DisputeService {
         Invoice invoice = invoiceRepository.findById(invoiceNumber)
                 .orElseThrow(() -> new EntityNotFoundException("Facture inconnue : " + invoiceNumber));
 
-        // Isolation : la facture doit appartenir au client connecté
         if (!invoice.getCustomer().getCustomerNumber().equals(current.getCustomerNumber())) {
             throw new SecurityException("Cette facture n'appartient pas à votre compte.");
+        }
+
+        if ("disputed".equals(invoice.getInvoiceStatus())) {
+            throw new IllegalStateException("Cette facture est déjà contestée.");
         }
 
         Customer customer = customerRepository.findById(current.getCustomerNumber())
                 .orElseThrow(() -> new EntityNotFoundException("Client inconnu"));
         User user = userRepository.findById(current.getId()).orElse(null);
+
+        String previousStatus = invoice.getInvoiceStatus() != null
+                ? invoice.getInvoiceStatus()
+                : "unpaid";
 
         InvoiceDispute saved = disputeRepository.save(InvoiceDispute.builder()
                 .invoiceNumber(invoiceNumber)
@@ -67,13 +75,12 @@ public class DisputeService {
                 .description(dto.description())
                 .filePath(filePath)
                 .status(InvoiceDispute.DisputeStatus.PENDING)
+                .previousInvoiceStatus(previousStatus)
                 .build());
 
-        // Marque la facture ERP comme contestée
         invoice.setInvoiceStatus("disputed");
         invoiceRepository.save(invoice);
 
-        // Notification admin contextuelle (PRD §2.2)
         String reasonLabel = translateReason(dto.reason());
         portalNotificationService.createAdminBroadcast(
                 "Contestation de facture reçue",
@@ -84,15 +91,11 @@ public class DisputeService {
                 "DISPUTE_OPENED",
                 "INVOICE_DISPUTE",
                 saved.getId().toString(),
-                "/admin/invoices/disputes"
+                "/admin/disputes"
         );
 
         return InvoiceDisputeResponseDto.from(saved);
     }
-
-    // =========================================================================
-    // Lectures
-    // =========================================================================
 
     @Transactional(readOnly = true)
     public List<InvoiceDisputeResponseDto> listForCurrentUser() {
@@ -134,14 +137,9 @@ public class DisputeService {
                 .toList();
     }
 
-    // =========================================================================
-    // Arbitrage admin
-    // =========================================================================
-
     @Transactional
     public InvoiceDisputeResponseDto approveDispute(Long id, String note) {
-        InvoiceDispute d = disputeRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Contestation introuvable"));
+        InvoiceDispute d = requirePendingDispute(id);
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
 
@@ -151,23 +149,19 @@ public class DisputeService {
         d.setResolvedAt(OffsetDateTime.now());
         InvoiceDispute saved = disputeRepository.save(d);
 
-        // La facture ERP est remise à "unpaid" après arbitrage (ou reste "disputed"
-        // selon le contexte). Pour le MVP : on libère le statut.
-        invoiceRepository.findById(d.getInvoiceNumber()).ifPresent(inv -> {
-            inv.setInvoiceStatus("unpaid");
-            invoiceRepository.save(inv);
-        });
+        // Restore prior payment state (credit-note / avoir generation is out of scope for this MVP).
+        restoreInvoiceStatus(d);
 
         if (d.getUser() != null) {
             portalNotificationService.createNotificationForUser(
                     d.getUser(),
                     "Votre contestation a été acceptée",
-                    "La contestation de votre facture " + d.getInvoiceNumber()
-                            + " a été acceptée. Un avoir sera émis sous peu.",
+                    "Votre contestation de la facture " + d.getInvoiceNumber()
+                            + " a été acceptée. Le statut de paiement de la facture a été restauré.",
                     "DISPUTE_RESOLVED",
                     "INVOICE_DISPUTE",
                     String.valueOf(saved.getId()),
-                    "/client/invoices"
+                    "/dashboard/factures"
             );
         }
         return InvoiceDisputeResponseDto.from(saved);
@@ -175,8 +169,7 @@ public class DisputeService {
 
     @Transactional
     public InvoiceDisputeResponseDto rejectDispute(Long id, String note) {
-        InvoiceDispute d = disputeRepository.findById(id)
-                .orElseThrow(() -> new EntityNotFoundException("Contestation introuvable"));
+        InvoiceDispute d = requirePendingDispute(id);
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
 
@@ -186,12 +179,7 @@ public class DisputeService {
         d.setResolvedAt(OffsetDateTime.now());
         InvoiceDispute saved = disputeRepository.save(d);
 
-        // Facture revient à son statut antérieur (paid/unpaid) — on l'infère
-        // depuis le payment_date : si payment_date IS NOT NULL => paid, sinon unpaid.
-        invoiceRepository.findById(d.getInvoiceNumber()).ifPresent(inv -> {
-            inv.setInvoiceStatus(inv.getPaymentDate() != null ? "paid" : "unpaid");
-            invoiceRepository.save(inv);
-        });
+        restoreInvoiceStatus(d);
 
         if (d.getUser() != null) {
             String msg = "Votre contestation de la facture " + d.getInvoiceNumber()
@@ -206,10 +194,35 @@ public class DisputeService {
                     "DISPUTE_RESOLVED",
                     "INVOICE_DISPUTE",
                     String.valueOf(saved.getId()),
-                    "/client/invoices"
+                    "/dashboard/factures"
             );
         }
         return InvoiceDisputeResponseDto.from(saved);
+    }
+
+    private InvoiceDispute requirePendingDispute(Long id) {
+        InvoiceDispute d = disputeRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Contestation introuvable"));
+        if (d.getStatus() != InvoiceDispute.DisputeStatus.PENDING) {
+            throw new IllegalStateException(
+                    "Seules les contestations en attente (PENDING) peuvent être tranchées. Statut actuel : "
+                            + d.getStatus());
+        }
+        return d;
+    }
+
+    private void restoreInvoiceStatus(InvoiceDispute d) {
+        invoiceRepository.findById(d.getInvoiceNumber()).ifPresent(inv -> {
+            String restored = d.getPreviousInvoiceStatus();
+            if (restored == null || restored.isBlank() || !RESTORABLE_STATUSES.contains(restored)) {
+                // Fallback for legacy disputes created before previous_invoice_status existed
+                restored = inv.getPaymentDate() != null ? "paid" : "unpaid";
+            }
+            inv.setInvoiceStatus(restored);
+            invoiceRepository.save(inv);
+            log.info("Facture {} restaurée à « {} » après résolution contestation {}",
+                    inv.getInvoiceNumber(), restored, d.getId());
+        });
     }
 
     private static String translateReason(InvoiceDispute.DisputeReason r) {

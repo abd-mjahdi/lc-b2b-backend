@@ -38,7 +38,9 @@ public class AdminDisputeController {
         return ResponseEntity.ok(disputeService.listPendingForAdmin());
     }
 
-    @Operation(summary = "Approuve une contestation (déclenche un avoir)")
+    @Operation(summary = "Approuve une contestation",
+            description = "Clôture la contestation PENDING et restaure le statut de paiement de la facture. "
+                    + "La génération d'avoir n'est pas implémentée dans ce MVP.")
     @PutMapping("/{id}/approve")
     public ResponseEntity<InvoiceDisputeResponseDto> approve(
             @PathVariable Long id,

@@ -11,6 +11,7 @@ public class AuthErrorCodes {
     public static final String ACCOUNT_ALREADY_ACTIVE = "ACCOUNT_ALREADY_ACTIVE";
     public static final String USER_NOT_FOUND = "USER_NOT_FOUND";
     public static final String ACCOUNT_DEACTIVATED = "ACCOUNT_DEACTIVATED";
+    public static final String INVALID_RECIPIENT_EMAIL = "INVALID_RECIPIENT_EMAIL";
 
     private AuthErrorCodes() {
     }

@@ -23,5 +23,17 @@ databaseChangeLog:
   - include:
       file: V6_seed_post_v5_patch.sql
       relativeToChangelogFile: true
+  - include:
+      file: V7_order_groups_and_dispute_previous_status.sql
+      relativeToChangelogFile: true
+  - include:
+      file: V8_admin_notification_per_recipient.sql
+      relativeToChangelogFile: true
+  - include:
+      file: V9_order_transport_method.sql
+      relativeToChangelogFile: true
+  - include:
+      file: V10_order_number_sequence.sql
+      relativeToChangelogFile: true
 
   

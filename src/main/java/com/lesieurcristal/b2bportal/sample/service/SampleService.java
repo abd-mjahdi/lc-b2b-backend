@@ -3,9 +3,9 @@ package com.lesieurcristal.b2bportal.sample.service;
 import com.lesieurcristal.b2bportal.entity.app.Product;
 import com.lesieurcristal.b2bportal.entity.app.SampleRequest;
 import com.lesieurcristal.b2bportal.entity.app.User;
+import com.lesieurcristal.b2bportal.entity.app.enums.UserRole;
 import com.lesieurcristal.b2bportal.entity.erpmock.Customer;
 import com.lesieurcristal.b2bportal.entity.erpmock.Order;
-import com.lesieurcristal.b2bportal.notification.dto.NotificationDto;
 import com.lesieurcristal.b2bportal.notification.service.PortalNotificationService;
 import com.lesieurcristal.b2bportal.repository.CustomerRepository;
 import com.lesieurcristal.b2bportal.repository.OrderRepository;
@@ -59,15 +59,7 @@ public class SampleService {
         Product product = productRepository.findById(dto.productCode())
                 .orElseThrow(() -> new EntityNotFoundException("Produit inconnu : " + dto.productCode()));
 
-        if (!Boolean.TRUE.equals(product.getIsSampleable())) {
-            throw new IllegalArgumentException("Ce produit n'est pas éligible aux échantillons.");
-        }
-        if (product.getMaxSampleQuantity() != null
-                && dto.quantity().compareTo(product.getMaxSampleQuantity()) > 0) {
-            throw new IllegalArgumentException(
-                    "Quantité supérieure au maximum autorisé ("
-                            + product.getMaxSampleQuantity() + ").");
-        }
+        validateSampleableProduct(product, dto.quantity());
 
         Customer customer = customerRepository.findById(current.getCustomerNumber())
                 .orElseThrow(() -> new EntityNotFoundException("Client inconnu"));
@@ -114,6 +106,8 @@ public class SampleService {
             BigDecimal quantity,
             String orderNumber) {
 
+        validateSampleableProduct(product, quantity);
+
         SampleRequest saved = sampleRequestRepository.save(SampleRequest.builder()
                 .customer(customer)
                 .user(user)
@@ -132,14 +126,39 @@ public class SampleService {
         return saved;
     }
 
+    private static void validateSampleableProduct(Product product, BigDecimal quantity) {
+        if (!Boolean.TRUE.equals(product.getIsSampleable())) {
+            throw new IllegalArgumentException("Ce produit n'est pas éligible aux échantillons.");
+        }
+        if (product.getMaxSampleQuantity() != null
+                && quantity.compareTo(product.getMaxSampleQuantity()) > 0) {
+            throw new IllegalArgumentException(
+                    "Quantité supérieure au maximum autorisé ("
+                            + product.getMaxSampleQuantity() + ").");
+        }
+    }
+
     // =========================================================================
     // Lecture
     // =========================================================================
 
     @Transactional(readOnly = true)
+    public List<SampleRequestResponseDto> listSamplesForCurrentUser() {
+        AuthenticatedUser current = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new IllegalStateException("Non authentifié"));
+        if (current.getRole() == UserRole.ADMIN) {
+            return getAllSamples();
+        }
+        return getSamplesForCurrentUser();
+    }
+
+    @Transactional(readOnly = true)
     public List<SampleRequestResponseDto> getSamplesForCurrentUser() {
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
+        if (current.getCustomerNumber() == null) {
+            return List.of();
+        }
         // Isolation : un client ne voit que ses échantillons
         return sampleRequestRepository
                 .findByCustomer_CustomerNumberOrderByRequestedAtDesc(current.getCustomerNumber())
@@ -187,19 +206,49 @@ public class SampleService {
         sr.setStatus(newStatus);
         SampleRequest saved = sampleRequestRepository.save(sr);
 
-        // Notification retour au client (PRD §2.2 flux retour)
-        NotificationDto dto = portalNotificationService.createNotificationForUser(
-                sr.getUser(),
-                "Mise à jour de votre demande d'échantillon",
-                String.format("Votre demande d'échantillon est passée de « %s » à « %s ».",
-                        translateStatus(oldStatus), translateStatus(newStatus)),
-                "SAMPLE_STATUS_CHANGED",
-                "SAMPLE_REQUEST",
-                String.valueOf(saved.getId()),
-                "/client/samples"
-        );
+        notifySampleStatusChange(saved, oldStatus, newStatus);
 
         return SampleRequestResponseDto.from(saved);
+    }
+
+    private void notifySampleStatusChange(SampleRequest sr, String oldStatus, String newStatus) {
+        String title = "Mise à jour de votre demande d'échantillon";
+        String message = String.format(
+                "Votre demande d'échantillon est passée de « %s » à « %s ».",
+                translateStatus(oldStatus), translateStatus(newStatus));
+        String entityId = String.valueOf(sr.getId());
+
+        if (sr.getUser() != null) {
+            portalNotificationService.createNotificationForUser(
+                    sr.getUser(),
+                    title,
+                    message,
+                    "SAMPLE_STATUS_CHANGED",
+                    "SAMPLE_REQUEST",
+                    entityId,
+                    "/client/samples"
+            );
+            return;
+        }
+
+        // Seed / legacy rows may have no requesting user — fan-out to customer accounts
+        if (sr.getCustomer() == null) {
+            log.warn("Sample {} status updated but no user/customer to notify", sr.getId());
+            return;
+        }
+        List<User> recipients = userRepository.findByCustomer_CustomerNumber(
+                sr.getCustomer().getCustomerNumber());
+        for (User recipient : recipients) {
+            portalNotificationService.createNotificationForUser(
+                    recipient,
+                    title,
+                    message,
+                    "SAMPLE_STATUS_CHANGED",
+                    "SAMPLE_REQUEST",
+                    entityId,
+                    "/client/samples"
+            );
+        }
     }
 
     /**
@@ -212,6 +261,14 @@ public class SampleService {
                 .orElseThrow(() -> new EntityNotFoundException("Demande introuvable"));
         Order order = orderRepository.findById(orderNumber)
                 .orElseThrow(() -> new EntityNotFoundException("Commande inconnue : " + orderNumber));
+
+        String sampleCustomer = sr.getCustomer() != null ? sr.getCustomer().getCustomerNumber() : null;
+        String orderCustomer = order.getCustomer() != null ? order.getCustomer().getCustomerNumber() : null;
+        if (sampleCustomer == null || orderCustomer == null || !sampleCustomer.equals(orderCustomer)) {
+            throw new IllegalArgumentException(
+                    "La commande doit appartenir au même client que la demande d'échantillon.");
+        }
+
         sr.setResultingOrder(order);
         SampleRequest saved = sampleRequestRepository.save(sr);
 

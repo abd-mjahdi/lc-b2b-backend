@@ -13,6 +13,7 @@ import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+import java.util.Comparator;
 import java.util.List;
 import java.util.Optional;
 
@@ -25,9 +26,9 @@ import java.util.Optional;
  *   <li>Diffusée via SSE aux émetteurs enregistrés.</li>
  * </ol>
  *
- * <p>L'isolation par client est appliquée lors des lectures :
- * un client ne récupère que ses propres notifications (par userId)
- * tandis qu'un admin récupère les siennes + le broadcast.</p>
+ * <p>Les broadcasts admin créent <strong>une ligne par admin</strong>
+ * (is_read isolé par destinataire). Les lectures sont toujours filtrées
+ * par {@code recipient_user_id}.</p>
  */
 @Slf4j
 @Service
@@ -56,9 +57,15 @@ public class PortalNotificationService {
             String relatedEntityId,
             String targetUrl) {
 
+        if (recipient == null || recipient.getId() == null) {
+            throw new IllegalArgumentException("Destinataire de notification requis");
+        }
+
+        UserRole role = recipient.getRole() != null ? recipient.getRole() : UserRole.CLIENT;
+
         Notification saved = notificationRepository.save(Notification.builder()
                 .recipientUser(recipient)
-                .recipientRole(UserRole.CLIENT)
+                .recipientRole(role)
                 .title(title)
                 .message(message)
                 .type(type)
@@ -75,7 +82,8 @@ public class PortalNotificationService {
     }
 
     /**
-     * Crée une notification broadcast pour tous les administrateurs.
+     * Crée une notification pour chaque administrateur (une ligne / is_read
+     * par admin). Pousse chaque copie via SSE sur le canal admin ciblé.
      */
     public NotificationDto createAdminBroadcast(
             String title,
@@ -85,22 +93,35 @@ public class PortalNotificationService {
             String relatedEntityId,
             String targetUrl) {
 
-        Notification saved = notificationRepository.save(Notification.builder()
-                .recipientUser(null)
-                .recipientRole(UserRole.ADMIN)
-                .title(title)
-                .message(message)
-                .type(type)
-                .relatedEntityType(relatedEntityType)
-                .relatedEntityId(relatedEntityId)
-                .targetUrl(targetUrl)
-                .isRead(false)
-                .build());
+        List<User> admins = userRepository.findByRole(UserRole.ADMIN);
+        if (admins.isEmpty()) {
+            log.warn("Aucun admin pour broadcast type={}", type);
+            return null;
+        }
 
-        NotificationDto dto = toDto(saved);
-        broker.broadcast(dto);
-        log.info("Notification broadcast admin -> type={} title={}", type, title);
-        return dto;
+        NotificationDto first = null;
+        for (User admin : admins) {
+            Notification saved = notificationRepository.save(Notification.builder()
+                    .recipientUser(admin)
+                    .recipientRole(UserRole.ADMIN)
+                    .title(title)
+                    .message(message)
+                    .type(type)
+                    .relatedEntityType(relatedEntityType)
+                    .relatedEntityId(relatedEntityId)
+                    .targetUrl(targetUrl)
+                    .isRead(false)
+                    .build());
+            NotificationDto dto = toDto(saved);
+            broker.broadcast(dto);
+            if (first == null) {
+                first = dto;
+            }
+        }
+
+        log.info("Notification broadcast admin -> type={} title={} recipients={}",
+                type, title, admins.size());
+        return first;
     }
 
     public void markAsRead(Long notificationId) {
@@ -108,11 +129,8 @@ public class PortalNotificationService {
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
         Notification n = notificationRepository.findById(notificationId)
                 .orElseThrow(() -> new IllegalArgumentException("Notification introuvable"));
-        // Isolation : un client ne peut marquer que ses propres notifications
-        if (current.getRole() == UserRole.CLIENT) {
-            if (n.getRecipientUser() == null || !n.getRecipientUser().getId().equals(current.getId())) {
-                throw new SecurityException("Accès refusé");
-            }
+        if (n.getRecipientUser() == null || !n.getRecipientUser().getId().equals(current.getId())) {
+            throw new SecurityException("Accès refusé");
         }
         n.setIsRead(true);
         notificationRepository.save(n);
@@ -140,30 +158,20 @@ public class PortalNotificationService {
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
 
-        List<Notification> mine = notificationRepository
-                .findByRecipientUserIdOrderByCreatedAtDesc(current.getId());
-
-        if (current.getRole() == UserRole.ADMIN) {
-            List<Notification> broadcast = notificationRepository
-                    .findByRecipientRoleAndRecipientUserIsNullOrderByCreatedAtDesc("ADMIN");
-            // concat en gardant l'ordre décroissant : la liste mine est déjà triée,
-            // on intercale mais le tri final est assuré par la base.
-            mine.addAll(broadcast);
-        }
-        return mine.stream().map(this::toDto).toList();
+        return notificationRepository
+                .findByRecipientUserIdOrderByCreatedAtDesc(current.getId())
+                .stream()
+                .sorted(Comparator.comparing(Notification::getCreatedAt,
+                        Comparator.nullsLast(Comparator.reverseOrder())))
+                .map(this::toDto)
+                .toList();
     }
 
     @Transactional(readOnly = true)
     public long countUnreadForCurrentUser() {
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
-        long mine = notificationRepository.countByRecipientUserIdAndIsReadFalse(current.getId());
-        if (current.getRole() == UserRole.ADMIN) {
-            long broadcast = notificationRepository
-                    .countByRecipientRoleAndRecipientUserIsNullAndIsReadFalse("ADMIN");
-            return mine + broadcast;
-        }
-        return mine;
+        return notificationRepository.countByRecipientUserIdAndIsReadFalse(current.getId());
     }
 
     public Optional<User> findUser(Long id) {

@@ -1,6 +1,7 @@
 package com.lesieurcristal.b2bportal.invoice.service;
 
 import com.lesieurcristal.b2bportal.entity.app.Document;
+import com.lesieurcristal.b2bportal.entity.app.enums.UserRole;
 import com.lesieurcristal.b2bportal.entity.erpmock.Invoice;
 import com.lesieurcristal.b2bportal.invoice.pdf.InvoicePdfTemplate;
 import com.lesieurcristal.b2bportal.repository.DocumentRepository;
@@ -24,7 +25,8 @@ import java.util.Optional;
 
 /**
  * Génère / réutilise le PDF facture (PRD — téléchargement).
- * Principe : vérifier {@code app.documents} d'abord, générer une seule fois, isoler par client.
+ * Principe : vérifier {@code app.documents} d'abord, générer une seule fois.
+ * Clients : isolés à leur {@code customerNumber}. Admins : toute facture.
  */
 @Slf4j
 @Service
@@ -44,22 +46,33 @@ public class InvoiceDocumentService {
     public InvoiceFile downloadInvoicePdf(String invoiceNumber) {
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Non authentifié"));
-        if (current.getCustomerNumber() == null || current.getCustomerNumber().isBlank()) {
-            throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Aucun numéro client associé");
-        }
 
         Invoice invoice = invoiceRepository.findByInvoiceNumberWithOrder(invoiceNumber)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable"));
 
-        if (invoice.getCustomer() == null
-                || !current.getCustomerNumber().equals(invoice.getCustomer().getCustomerNumber())) {
-            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable");
+        boolean admin = current.getRole() == UserRole.ADMIN;
+        if (!admin) {
+            if (current.getCustomerNumber() == null || current.getCustomerNumber().isBlank()) {
+                throw new ResponseStatusException(HttpStatus.BAD_REQUEST, "Aucun numéro client associé");
+            }
+            if (invoice.getCustomer() == null
+                    || !current.getCustomerNumber().equals(invoice.getCustomer().getCustomerNumber())) {
+                throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable");
+            }
         }
+
+        String ownerCustomerNumber = invoice.getCustomer() != null
+                ? invoice.getCustomer().getCustomerNumber()
+                : null;
 
         Optional<Document> existing = documentRepository.findByDocTypeAndNaturalKey(DOC_TYPE_INVOICE, invoiceNumber);
         if (existing.isPresent()) {
             Document doc = existing.get();
-            assertDocumentBelongsToCustomer(doc, current.getCustomerNumber());
+            if (!admin) {
+                assertDocumentBelongsToCustomer(doc, current.getCustomerNumber());
+            } else if (ownerCustomerNumber != null) {
+                assertDocumentBelongsToCustomer(doc, ownerCustomerNumber);
+            }
             if (doc.getFilePath() != null && "ready".equals(doc.getStatus())) {
                 Path path = resolveStoragePath(doc.getFilePath());
                 if (Files.isRegularFile(path)) {
@@ -96,7 +109,6 @@ public class InvoiceDocumentService {
         try {
             return documentRepository.save(doc);
         } catch (DataIntegrityViolationException race) {
-            // Concurrent first download — reuse the winner row and keep our file on disk
             log.warn("Concurrence sur document invoice {}: réutilisation de l'existant", invoice.getInvoiceNumber());
             Document winner = documentRepository
                     .findByDocTypeAndNaturalKey(DOC_TYPE_INVOICE, invoice.getInvoiceNumber())

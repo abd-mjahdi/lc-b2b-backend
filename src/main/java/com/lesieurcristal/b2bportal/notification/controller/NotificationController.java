@@ -32,7 +32,7 @@ public class NotificationController {
     private final SseNotificationBroker sseBroker;
 
     @Operation(summary = "Liste des notifications de l'utilisateur connecté",
-            description = "Trie par date décroissante. Un client ne voit que ses propres notifications ; un admin voit les siennes + le broadcast.")
+            description = "Trie par date décroissante. Chaque utilisateur ne voit que les lignes où il est destinataire (broadcasts admin = une ligne par admin).")
     @GetMapping
     public ResponseEntity<List<NotificationDto>> list() {
         return ResponseEntity.ok(notificationService.getNotificationsForCurrentUser());

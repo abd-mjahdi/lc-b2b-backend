@@ -8,4 +8,6 @@ import java.util.Optional;
 public interface OrderStatusRepository extends JpaRepository<OrderStatus, String> {
 
     Optional<OrderStatus> findByOrderNumber(String orderNumber);
+
+    long countByCurrentStatus(String currentStatus);
 }

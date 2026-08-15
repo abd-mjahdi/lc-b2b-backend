@@ -19,10 +19,6 @@ import com.lesieurcristal.b2bportal.security.JwtService;
 import com.lesieurcristal.b2bportal.security.PasswordHasher;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
-import org.springframework.security.authentication.AuthenticationManager;
-import org.springframework.security.authentication.BadCredentialsException;
-import org.springframework.security.authentication.DisabledException;
-import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -32,7 +28,6 @@ import java.time.OffsetDateTime;
 @RequiredArgsConstructor
 public class AuthService {
 
-    private final AuthenticationManager authenticationManager;
     private final JwtService jwtService;
     private final JwtProperties jwtProperties;
     private final PasswordHasher passwordHasher;
@@ -40,56 +35,51 @@ public class AuthService {
     private final UserRepository userRepository;
     private final ActivationTokenGenerator activationTokenGenerator;
 
+    /**
+     * Verifies the password first, then account state. Unknown email / wrong
+     * password always return the same unauthorized message (no enumeration).
+     */
     public LoginResponse login(LoginRequest request) {
-        userRepository.findByLogin(request.login()).ifPresent(user -> {
-            if (Boolean.TRUE.equals(user.getIsDeactivated())) {
-                throw new AuthException(
-                        HttpStatus.FORBIDDEN,
-                        AuthErrorCodes.ACCOUNT_DEACTIVATED,
-                        "Your account has been deactivated. Please contact support."
-                );
-            }
-            if (!UserAuthSupport.isActive(user)) {
-                throw new AuthException(
-                        HttpStatus.FORBIDDEN,
-                        AuthErrorCodes.ACCOUNT_NOT_ACTIVATED,
-                        "Account is not activated yet. Check your email for the activation link."
-                );
-            }
-        });
+        String identifier = request.identifier();
+        User user = userRepository.findByEmailIgnoreCase(identifier)
+                .or(() -> userRepository.findByLogin(identifier))
+                .orElse(null);
+        boolean passwordOk = user != null
+                && passwordHasher.matches(request.password(), user.getPasswordHash());
 
-        try {
-            var authentication = authenticationManager.authenticate(
-                    new UsernamePasswordAuthenticationToken(request.login(), request.password())
-            );
-            AuthenticatedUser principal = (AuthenticatedUser) authentication.getPrincipal();
-            String accessToken = jwtService.generateToken(principal);
-            User user = userRepository.findByLogin(principal.getLogin())
-                    .orElseThrow(() -> new AuthException(
-                            HttpStatus.UNAUTHORIZED,
-                            AuthErrorCodes.INVALID_CREDENTIALS,
-                            "Invalid login or password"
-                    ));
-
-            return new LoginResponse(
-                    accessToken,
-                    "Bearer",
-                    jwtProperties.expirationMs(),
-                    AuthMapper.toUserResponse(user)
-            );
-        } catch (BadCredentialsException ex) {
+        if (!passwordOk) {
             throw new AuthException(
                     HttpStatus.UNAUTHORIZED,
                     AuthErrorCodes.INVALID_CREDENTIALS,
-                    "Invalid login or password"
+                    "Invalid email or password"
             );
-        } catch (DisabledException ex) {
+        }
+
+        // Password verified — account-state messages are safe (no free enumeration)
+        if (Boolean.TRUE.equals(user.getIsDeactivated())) {
+            throw new AuthException(
+                    HttpStatus.FORBIDDEN,
+                    AuthErrorCodes.ACCOUNT_DEACTIVATED,
+                    "Your account has been deactivated. Please contact support."
+            );
+        }
+        if (!UserAuthSupport.isActive(user)) {
             throw new AuthException(
                     HttpStatus.FORBIDDEN,
                     AuthErrorCodes.ACCOUNT_NOT_ACTIVATED,
                     "Account is not activated yet. Check your email for the activation link."
             );
         }
+
+        AuthenticatedUser principal = new AuthenticatedUser(user);
+        String accessToken = jwtService.generateToken(principal);
+
+        return new LoginResponse(
+                accessToken,
+                "Bearer",
+                jwtProperties.expirationMs(),
+                AuthMapper.toUserResponse(user)
+        );
     }
 
     @Transactional

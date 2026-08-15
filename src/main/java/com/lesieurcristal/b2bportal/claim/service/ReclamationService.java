@@ -17,10 +17,23 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 @Service
 @RequiredArgsConstructor
 public class ReclamationService {
+
+    private static final Set<String> ALLOWED_STATUSES = Set.of(
+            "new", "in_progress", "resolved", "rejected"
+    );
+
+    private static final Map<String, Set<String>> ALLOWED_TRANSITIONS = Map.of(
+            "new", Set.of("in_progress", "rejected"),
+            "in_progress", Set.of("resolved", "rejected"),
+            "resolved", Set.of(),
+            "rejected", Set.of()
+    );
 
     private final ReclamationRepository reclamationRepository;
     private final CustomerRepository customerRepository;
@@ -85,24 +98,69 @@ public class ReclamationService {
 
     @Transactional
     public ReclamationResponseDto updateStatus(Long id, String status) {
+        if (status == null || !ALLOWED_STATUSES.contains(status)) {
+            throw new IllegalArgumentException(
+                    "Statut invalide. Valeurs autorisées : " + ALLOWED_STATUSES);
+        }
+
         Reclamation r = reclamationRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Réclamation introuvable"));
+
+        String current = r.getStatus() != null ? r.getStatus() : "new";
+        Set<String> allowedNext = ALLOWED_TRANSITIONS.getOrDefault(current, Set.of());
+        if (!allowedNext.contains(status)) {
+            throw new IllegalStateException(
+                    "Transition interdite : « " + current + " » → « " + status + " ».");
+        }
+
         r.setStatus(status);
         Reclamation saved = reclamationRepository.save(r);
 
+        notifyClaimStatus(saved, status);
+        return ReclamationResponseDto.from(saved);
+    }
+
+    private void notifyClaimStatus(Reclamation r, String status) {
         if (r.getUser() != null) {
             portalNotificationService.createNotificationForUser(
                     r.getUser(),
                     "Mise à jour de votre réclamation",
                     String.format("Votre réclamation (lot %s) est désormais : %s.",
-                            r.getLotNumber(), status),
+                            r.getLotNumber(), translateStatus(status)),
                     "CLAIM_STATUS_CHANGED",
                     "RECLAMATION",
-                    String.valueOf(saved.getId()),
-                    "/client/claims"
+                    String.valueOf(r.getId()),
+                    "/dashboard/demandes/reclamation"
+            );
+            return;
+        }
+        if (r.getCustomer() == null) {
+            return;
+        }
+        for (User recipient : userRepository.findByCustomer_CustomerNumber(
+                r.getCustomer().getCustomerNumber())) {
+            portalNotificationService.createNotificationForUser(
+                    recipient,
+                    "Mise à jour de votre réclamation",
+                    String.format("Votre réclamation (lot %s) est désormais : %s.",
+                            r.getLotNumber(), translateStatus(status)),
+                    "CLAIM_STATUS_CHANGED",
+                    "RECLAMATION",
+                    String.valueOf(r.getId()),
+                    "/dashboard/demandes/reclamation"
             );
         }
-        return ReclamationResponseDto.from(saved);
+    }
+
+    private static String translateStatus(String s) {
+        if (s == null) return "";
+        return switch (s) {
+            case "new" -> "Nouveau";
+            case "in_progress" -> "En cours";
+            case "resolved" -> "Résolu";
+            case "rejected" -> "Rejeté";
+            default -> s;
+        };
     }
 
     private static String truncate(String s, int max) {

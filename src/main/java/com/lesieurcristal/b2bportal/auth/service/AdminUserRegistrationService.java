@@ -40,6 +40,24 @@ public class AdminUserRegistrationService {
 
     @Transactional
     public AdminRegisterClientResponse registerClient(AdminRegisterClientRequest request) {
+        String login = request.login().trim();
+        String email = request.email().trim();
+
+        if (userRepository.existsByLogin(login)) {
+            throw new AuthException(
+                    HttpStatus.CONFLICT,
+                    AuthErrorCodes.LOGIN_ALREADY_EXISTS,
+                    "Un compte avec l'identifiant « " + login + " » existe déjà."
+            );
+        }
+        if (userRepository.existsByEmail(email)) {
+            throw new AuthException(
+                    HttpStatus.CONFLICT,
+                    AuthErrorCodes.EMAIL_ALREADY_EXISTS,
+                    "Un compte avec l'email « " + email + " » existe déjà."
+            );
+        }
+
         Customer customer = customerRepository.findById(request.customerNumber())
                 .orElseGet(() -> {
                     Customer newCustomer = Customer.builder()
@@ -50,22 +68,21 @@ public class AdminUserRegistrationService {
                             .build();
                     return customerRepository.save(newCustomer);
                 });
-        User user = userRepository.findByLogin(request.login())
-                .orElseGet(() -> userRepository.findByEmail(request.email())
-                        .orElseGet(() -> User.builder().build()));
 
-        user.setCustomer(customer);
-        user.setLastName(request.lastName());
-        user.setFirstName(request.firstName());
-        user.setEmail(request.email());
-        user.setPhone(request.phone());
-        user.setLogin(request.login());
-        user.setRole(UserRole.CLIENT);
-        user.setLanguage(request.language() != null && !request.language().isBlank()
-                ? request.language()
-                : "fr");
-        user.setIsActive(false);
-        user.setPasswordHash(passwordHasher.hash(activationTokenGenerator.generateRawToken()));
+        User user = User.builder()
+                .customer(customer)
+                .lastName(request.lastName())
+                .firstName(request.firstName())
+                .email(email)
+                .phone(request.phone())
+                .login(login)
+                .role(UserRole.CLIENT)
+                .language(request.language() != null && !request.language().isBlank()
+                        ? request.language()
+                        : "fr")
+                .isActive(false)
+                .passwordHash(passwordHasher.hash(activationTokenGenerator.generateRawToken()))
+                .build();
 
         user = userRepository.save(user);
 
@@ -136,9 +153,7 @@ public class AdminUserRegistrationService {
         activationTokenRepository.save(activationToken);
 
         String activationUrl = activationProperties.buildActivationUrl(rawToken);
-        String targetEmail = (request != null && request.recipientEmail() != null && !request.recipientEmail().isBlank())
-                ? request.recipientEmail()
-                : user.getEmail();
+        String targetEmail = resolveActivationRecipient(user, request);
 
         notificationService.sendAccountActivationEmail(new AccountActivationEmail(
                 targetEmail,
@@ -151,10 +166,40 @@ public class AdminUserRegistrationService {
         return new com.lesieurcristal.b2bportal.auth.dto.SendActivationEmailResponse(
                 user.getId(),
                 targetEmail,
-                activationUrl,
                 now,
                 "Activation link successfully sent to " + targetEmail
         );
+    }
+
+    /**
+     * Activation links may only go to the account's registered email.
+     * An explicit recipient is accepted only when it matches that address.
+     */
+    private static String resolveActivationRecipient(
+            User user,
+            com.lesieurcristal.b2bportal.auth.dto.SendActivationEmailRequest request
+    ) {
+        String accountEmail = user.getEmail();
+        if (accountEmail == null || accountEmail.isBlank()) {
+            throw new AuthException(
+                    HttpStatus.BAD_REQUEST,
+                    AuthErrorCodes.INVALID_RECIPIENT_EMAIL,
+                    "Le compte n'a pas d'email enregistré pour l'activation."
+            );
+        }
+        if (request == null || request.recipientEmail() == null || request.recipientEmail().isBlank()) {
+            return accountEmail.trim();
+        }
+        String requested = request.recipientEmail().trim();
+        if (!accountEmail.trim().equalsIgnoreCase(requested)) {
+            throw new AuthException(
+                    HttpStatus.BAD_REQUEST,
+                    AuthErrorCodes.INVALID_RECIPIENT_EMAIL,
+                    "Le lien d'activation ne peut être envoyé qu'à l'email du compte (« "
+                            + accountEmail + " »)."
+            );
+        }
+        return accountEmail.trim();
     }
 
     @Transactional(readOnly = true)
@@ -210,8 +255,8 @@ public class AdminUserRegistrationService {
                 "    c.vat_id, " +
                 "    (SELECT COUNT(*) FROM erp_mock.orders o WHERE o.customer_number = c.customer_number) as order_count, " +
                 "    (SELECT COUNT(*) FROM erp_mock.invoices i WHERE i.customer_number = c.customer_number) as invoice_count, " +
-                "    ((SELECT COUNT(*) FROM app.reclamations r WHERE r.customer_number = c.customer_number AND r.status != 'resolved') + " +
-                "     (SELECT COUNT(*) FROM app.quotation_requests q WHERE q.customer_number = c.customer_number AND q.status = 'new')) as open_req_count, " +
+                "    ((SELECT COUNT(*) FROM app.reclamations r WHERE r.customer_number = c.customer_number AND r.status NOT IN ('resolved', 'rejected')) + " +
+                "     (SELECT COUNT(*) FROM app.sample_requests s WHERE s.customer_number = c.customer_number AND s.status IN ('new', 'processing'))) as open_req_count, " +
                 "    COALESCE((SELECT SUM(i.total_amount) FROM erp_mock.invoices i WHERE i.customer_number = c.customer_number), 0) as total_revenue " +
                 "FROM erp_mock.customers c";
 

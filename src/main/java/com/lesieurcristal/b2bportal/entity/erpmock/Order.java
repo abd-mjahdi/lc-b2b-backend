@@ -56,6 +56,14 @@ public class Order {
     @Column(name = "customer_order_reference", length = 50)
     private String customerOrderReference;
 
+    /**
+     * Portal grouping key: all line rows from one {@code POST /api/orders}
+     * share the same {@code orderGroupId} while keeping distinct SAP-like
+     * {@code orderNumber} PKs.
+     */
+    @Column(name = "order_group_id", length = 40, nullable = false)
+    private String orderGroupId;
+
     /** SAP "Article" */
     @Column(name = "product_code", length = 30, nullable = false)
     private String productCode;
@@ -91,6 +99,10 @@ public class Order {
     /** SAP "Pays (livré)" */
     @Column(name = "ship_to_country", length = 100)
     private String shipToCountry;
+
+    /** Mode de transport choisi à la soumission portail (camion, etc.). */
+    @Column(name = "transport_method", length = 50)
+    private String transportMethod;
 
     /** SAP "Date liv." */
     @Column(name = "requested_delivery_date")

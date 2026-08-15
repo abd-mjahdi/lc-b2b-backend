@@ -12,7 +12,11 @@ import java.util.Optional;
 @Repository
 public interface InvoiceRepository extends JpaRepository<Invoice, String> {
 
-    List<Invoice> findByCustomer_CustomerNumberOrderByInvoiceDateDesc(String customerNumber);
+    @Query("SELECT i FROM Invoice i LEFT JOIN FETCH i.order "
+            + "WHERE i.customer.customerNumber = :customerNumber "
+            + "ORDER BY i.invoiceDate DESC, i.invoiceNumber DESC")
+    List<Invoice> findByCustomer_CustomerNumberWithOrderOrderByInvoiceDateDesc(
+            @Param("customerNumber") String customerNumber);
 
     @Query("SELECT i FROM Invoice i LEFT JOIN FETCH i.order LEFT JOIN FETCH i.customer "
             + "WHERE i.invoiceNumber = :invoiceNumber")

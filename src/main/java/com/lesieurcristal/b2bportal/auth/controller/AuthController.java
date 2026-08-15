@@ -26,7 +26,7 @@ public class AuthController {
 
     private final AuthService authService;
 
-    @Operation(summary = "Connexion utilisateur", description = "Authentifie un utilisateur via login et mot de passe et retourne un jeton JWT.")
+    @Operation(summary = "Connexion utilisateur", description = "Authentifie un utilisateur via e-mail et mot de passe et retourne un jeton JWT.")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Connexion réussie, jeton JWT retourné"),
             @ApiResponse(responseCode = "401", description = "Identifiants invalides ou compte inactif")

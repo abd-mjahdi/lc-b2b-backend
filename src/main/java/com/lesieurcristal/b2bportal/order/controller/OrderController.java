@@ -49,7 +49,8 @@ public class OrderController {
     }
 
     @Operation(summary = "Historique des commandes du client connecté",
-            description = "Récupère la liste de toutes les commandes du client authentifié avec le statut de la facture associée.")
+            description = "Filtre optionnel : `status` = statut logistique (confirmed/…), "
+                    + "`invoiceStatus` = statut paiement facture (paid/unpaid/…).")
     @ApiResponses(value = {
             @ApiResponse(responseCode = "200", description = "Liste des commandes récupérée avec succès"),
             @ApiResponse(responseCode = "401", description = "Utilisateur non authentifié"),
@@ -59,10 +60,14 @@ public class OrderController {
     public ResponseEntity<org.springframework.data.domain.Page<OrderResponseDto>> getOrders(
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate startDate,
             @RequestParam(required = false) @org.springframework.format.annotation.DateTimeFormat(iso = org.springframework.format.annotation.DateTimeFormat.ISO.DATE) java.time.LocalDate endDate,
+            @Parameter(description = "Statut logistique (order_status.currentStatus)")
             @RequestParam(required = false) String status,
+            @Parameter(description = "Statut paiement facture (invoices.invoice_status)")
+            @RequestParam(required = false) String invoiceStatus,
             @org.springframework.data.web.PageableDefault(size = 10) org.springframework.data.domain.Pageable pageable) {
 
-        org.springframework.data.domain.Page<OrderResponseDto> orders = orderService.getOrdersForCurrentUser(startDate, endDate, status, pageable);
+        org.springframework.data.domain.Page<OrderResponseDto> orders = orderService.getOrdersForCurrentUser(
+                startDate, endDate, status, invoiceStatus, pageable);
         return ResponseEntity.ok(orders);
     }
 

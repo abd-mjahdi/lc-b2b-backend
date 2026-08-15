@@ -9,6 +9,7 @@ import java.util.List;
  */
 public record OrderDetailDto(
         String orderNumber,
+        String orderGroupId,
         LocalDate orderDate,
         String customerNumber,
         String customerOrderReference,

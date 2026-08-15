@@ -35,7 +35,7 @@ import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.concurrent.ThreadLocalRandom;
+import java.util.UUID;
 
 @Slf4j
 @Service
@@ -59,6 +59,7 @@ public class OrderService {
             java.time.LocalDate startDate,
             java.time.LocalDate endDate,
             String status,
+            String invoiceStatus,
             org.springframework.data.domain.Pageable pageable) {
 
         AuthenticatedUser currentUser = SecurityUtils.getCurrentUser()
@@ -69,7 +70,8 @@ public class OrderService {
             throw OrderException.noCustomerAssociated();
         }
 
-        return erpOrderConnector.getOrdersByCustomerNumber(customerNumber, startDate, endDate, status, pageable);
+        return erpOrderConnector.getOrdersByCustomerNumber(
+                customerNumber, startDate, endDate, status, invoiceStatus, pageable);
     }
 
     /**
@@ -80,9 +82,11 @@ public class OrderService {
             java.time.LocalDate startDate,
             java.time.LocalDate endDate,
             String status,
+            String invoiceStatus,
             org.springframework.data.domain.Pageable pageable) {
 
-        return erpOrderConnector.getOrdersByCustomerNumber(customerNumber, startDate, endDate, status, pageable);
+        return erpOrderConnector.getOrdersByCustomerNumber(
+                customerNumber, startDate, endDate, status, invoiceStatus, pageable);
     }
 
     /**
@@ -104,43 +108,64 @@ public class OrderService {
     }
 
     /**
-     * [Admin] Met à jour {@code erp_mock.order_status} et notifie le(s) utilisateur(s) client.
+     * [Admin] Met à jour {@code erp_mock.order_status} pour toutes les lignes
+     * du même {@code order_group_id}, puis notifie le client une seule fois.
      */
     @Transactional
     public OrderStatusResponseDto updateOrderStatus(String orderNumber, UpdateOrderStatusDto dto) {
         Order order = orderRepository.findByOrderNumberWithInvoiceAndStatus(orderNumber)
                 .orElseThrow(() -> OrderException.notFound(orderNumber));
 
-        OrderStatus status = orderStatusRepository.findByOrderNumber(orderNumber)
-                .orElseGet(() -> OrderStatus.builder()
-                        .order(order)
-                        .orderNumber(orderNumber)
-                        .build());
-
-        String oldStatus = status.getCurrentStatus();
-        status.setCurrentStatus(dto.status());
-        status.setStatusUpdatedAt(OffsetDateTime.now());
-        if (dto.expectedDeliveryDate() != null) {
-            status.setExpectedDeliveryDate(dto.expectedDeliveryDate());
-        }
-        if (dto.carrierName() != null) {
-            status.setCarrierName(dto.carrierName());
-        }
-        if (dto.carrierReference() != null) {
-            status.setCarrierReference(dto.carrierReference());
+        String groupId = order.getOrderGroupId() != null ? order.getOrderGroupId() : order.getOrderNumber();
+        List<Order> groupLines = orderRepository.findByOrderGroupIdWithInvoiceAndStatus(groupId);
+        if (groupLines.isEmpty()) {
+            groupLines = List.of(order);
         }
 
-        OrderStatus saved = orderStatusRepository.save(status);
+        String oldStatus = null;
+        OrderStatus primarySaved = null;
+        OffsetDateTime now = OffsetDateTime.now();
 
-        notifyClientOfStatusChange(order, oldStatus, saved.getCurrentStatus());
+        for (Order line : groupLines) {
+            OrderStatus status = orderStatusRepository.findByOrderNumber(line.getOrderNumber())
+                    .orElseGet(() -> OrderStatus.builder()
+                            .order(line)
+                            .orderNumber(line.getOrderNumber())
+                            .build());
+            if (oldStatus == null) {
+                oldStatus = status.getCurrentStatus();
+            }
+            status.setCurrentStatus(dto.status());
+            status.setStatusUpdatedAt(now);
+            if (dto.expectedDeliveryDate() != null) {
+                status.setExpectedDeliveryDate(dto.expectedDeliveryDate());
+            }
+            if (dto.carrierName() != null) {
+                status.setCarrierName(dto.carrierName());
+            }
+            if (dto.carrierReference() != null) {
+                status.setCarrierReference(dto.carrierReference());
+            }
+            OrderStatus saved = orderStatusRepository.save(status);
+            if (line.getOrderNumber().equals(orderNumber)) {
+                primarySaved = saved;
+            }
+        }
+
+        if (primarySaved == null) {
+            primarySaved = orderStatusRepository.findByOrderNumber(orderNumber)
+                    .orElseThrow(() -> OrderException.notFound(orderNumber));
+        }
+
+        notifyClientOfStatusChange(order, oldStatus, primarySaved.getCurrentStatus());
 
         return new OrderStatusResponseDto(
-                saved.getOrderNumber(),
-                saved.getCurrentStatus(),
-                saved.getStatusUpdatedAt(),
-                saved.getExpectedDeliveryDate(),
-                saved.getCarrierName(),
-                saved.getCarrierReference()
+                primarySaved.getOrderNumber(),
+                primarySaved.getCurrentStatus(),
+                primarySaved.getStatusUpdatedAt(),
+                primarySaved.getExpectedDeliveryDate(),
+                primarySaved.getCarrierName(),
+                primarySaved.getCarrierReference()
         );
     }
 
@@ -173,7 +198,7 @@ public class OrderService {
                 order.getOrderNumber(),
                 translateOrderStatus(oldStatus),
                 translateOrderStatus(newStatus));
-        String targetUrl = "/client/orders/" + order.getOrderNumber();
+        String targetUrl = "/dashboard/commandes/" + order.getOrderNumber();
 
         for (User recipient : recipients) {
             portalNotificationService.createNotificationForUser(
@@ -193,14 +218,12 @@ public class OrderService {
                 ? order.getCustomer().getCustomerNumber()
                 : null;
 
-        List<Order> lines;
-        String reference = order.getCustomerOrderReference();
-        if (customerNumber != null && reference != null && !reference.isBlank()) {
-            lines = orderRepository.findByCustomerNumberAndCustomerOrderReference(customerNumber, reference);
-            if (lines.isEmpty()) {
-                lines = List.of(order);
-            }
-        } else {
+        String groupId = order.getOrderGroupId() != null && !order.getOrderGroupId().isBlank()
+                ? order.getOrderGroupId()
+                : order.getOrderNumber();
+
+        List<Order> lines = orderRepository.findByOrderGroupIdWithInvoiceAndStatus(groupId);
+        if (lines.isEmpty()) {
             lines = List.of(order);
         }
 
@@ -260,6 +283,7 @@ public class OrderService {
 
         return new OrderDetailDto(
                 order.getOrderNumber(),
+                groupId,
                 order.getOrderDate(),
                 customerNumber,
                 order.getCustomerOrderReference(),
@@ -315,6 +339,16 @@ public class OrderService {
                 .orElseThrow(() -> new IllegalStateException("Client inconnu"));
         User user = userRepository.findById(current.getId()).orElse(null);
 
+        String customerRef = dto.customerOrderReference();
+        if (customerRef != null && !customerRef.isBlank()
+                && orderRepository.existsByCustomer_CustomerNumberAndCustomerOrderReference(
+                customer.getCustomerNumber(), customerRef.trim())) {
+            throw OrderException.duplicateCustomerReference(customerRef.trim());
+        }
+
+        // One group id for every line of this submission
+        String orderGroupId = "OG-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
+
         // 1. Calcul du montant total et résolution des produits
         BigDecimal totalNet = BigDecimal.ZERO;
         String currency = "MAD";
@@ -332,33 +366,22 @@ public class OrderService {
             totalNet = totalNet.add(lineTotal);
             totalQty += line.quantity().intValue();
 
-            String orderNumber = generateOrderNumber();
-            Order order = Order.builder()
-                    .orderNumber(orderNumber)
-                    .orderDate(LocalDate.now())
-                    .customer(customer)
-                    .customerOrderReference(dto.customerOrderReference())
-                    .productCode(product.getCode())
-                    .productLabel(product.getName())
-                    .quantityOrdered(line.quantity())
-                    .quantityShipped(BigDecimal.ZERO)
-                    .salesUnit(line.salesUnit() != null ? line.salesUnit() :
-                            (product.getSalesUnit() != null ? product.getSalesUnit() : "CAR"))
-                    .netAmount(lineTotal)
-                    .currency(currency)
-                    .shipToCity(dto.shipToCity())
-                    .shipToCountry(dto.shipToCountry())
-                    .requestedDeliveryDate(dto.requestedDeliveryDate())
-                    .plannedDeliveryDate(dto.requestedDeliveryDate())
-                    .goodsIssueDate(null)
-                    .build();
-            Order savedOrder = orderRepository.save(order);
+            Order savedOrder = persistNewOrderLine(
+                    orderGroupId,
+                    customer,
+                    customerRef != null ? customerRef.trim() : null,
+                    product,
+                    line,
+                    lineTotal,
+                    currency,
+                    dto
+            );
             createdLines.add(savedOrder);
 
             // Création du statut en direct (PK = orderNumber, FK via @MapsId)
             orderStatusRepository.save(OrderStatus.builder()
                     .order(savedOrder)
-                    .orderNumber(orderNumber)
+                    .orderNumber(savedOrder.getOrderNumber())
                     .currentStatus("confirmed")
                     .statusUpdatedAt(OffsetDateTime.now())
                     .expectedDeliveryDate(dto.requestedDeliveryDate())
@@ -375,10 +398,6 @@ public class OrderService {
             for (CreateOrderRequestDto.SampleLine sample : dto.sampleProductCodes()) {
                 Product product = productRepository.findById(sample.productCode())
                         .orElseThrow(() -> new IllegalArgumentException("Produit échantillon inconnu : " + sample.productCode()));
-                if (!Boolean.TRUE.equals(product.getIsSampleable())) {
-                    throw new IllegalArgumentException(
-                            "Le produit " + product.getCode() + " n'est pas éligible aux échantillons.");
-                }
                 SampleRequest sr = sampleService.createLinkedSampleRequest(
                         customer, user, product, sample.quantity(), firstOrderNumber);
                 linkedSampleIds.add(sr.getId().toString());
@@ -387,9 +406,10 @@ public class OrderService {
 
         // 3. Notification admin (PRD §2.2 flux aller)
         String message = String.format(
-                "Nouvelle commande #%s contenant %d ligne(s) et %d échantillon(s) soumise par %s (%s).",
+                "Nouvelle commande #%s (%d ligne(s), groupe %s, %d échantillon(s)) soumise par %s (%s).",
                 firstOrderNumber,
                 createdLines.size(),
+                orderGroupId,
                 linkedSampleIds.size(),
                 customer.getCompanyName(),
                 customer.getCustomerNumber());
@@ -400,16 +420,17 @@ public class OrderService {
                 "ORDER_CREATED",
                 "ORDER",
                 firstOrderNumber,
-                "/admin/orders"
+                "/admin/clients"
         );
 
-        log.info("Commande {} créée pour {} ({} lignes, {} échantillons)",
-                firstOrderNumber, customer.getCustomerNumber(),
+        log.info("Commande groupe {} créée pour {} (tête={}, {} lignes, {} échantillons)",
+                orderGroupId, customer.getCustomerNumber(), firstOrderNumber,
                 createdLines.size(), linkedSampleIds.size());
 
         return new OrderSubmissionResponseDto(
                 firstOrderNumber,
-                dto.customerOrderReference(),
+                orderGroupId,
+                customerRef != null ? customerRef.trim() : null,
                 LocalDate.now(),
                 dto.requestedDeliveryDate(),
                 totalNet,
@@ -419,24 +440,54 @@ public class OrderService {
                 dto.transportMethod(),
                 "confirmed",
                 totalQty,
+                createdLines.size(),
                 linkedSampleIds,
                 OffsetDateTime.now()
         );
     }
 
     /**
-     * Génère un numéro de commande SAP-compatible :
-     * préfixe 4500 + 6 chiffres pseudo-aléatoires uniques.
+     * Inserts a line with a sequence-allocated SAP-like order number
+     * ({@code erp_mock.order_number_seq}) — no exists-then-insert race.
      */
-    private String generateOrderNumber() {
-        for (int i = 0; i < 10; i++) {
-            String candidate = "4500" + String.format("%06d",
-                    ThreadLocalRandom.current().nextInt(0, 999_999));
-            if (!orderRepository.existsById(candidate)) {
-                return candidate;
-            }
+    private Order persistNewOrderLine(
+            String orderGroupId,
+            Customer customer,
+            String customerRef,
+            Product product,
+            CreateOrderRequestDto.OrderLine line,
+            BigDecimal lineTotal,
+            String currency,
+            CreateOrderRequestDto dto) {
+
+        Long next = orderRepository.nextOrderNumberSeq();
+        if (next == null) {
+            throw new IllegalStateException("Impossible d'allouer un numéro de commande");
         }
-        throw new IllegalStateException("Impossible de générer un numéro de commande unique");
+        String orderNumber = String.valueOf(next);
+
+        Order order = Order.builder()
+                .orderNumber(orderNumber)
+                .orderGroupId(orderGroupId)
+                .orderDate(LocalDate.now())
+                .customer(customer)
+                .customerOrderReference(customerRef)
+                .productCode(product.getCode())
+                .productLabel(product.getName())
+                .quantityOrdered(line.quantity())
+                .quantityShipped(BigDecimal.ZERO)
+                .salesUnit(line.salesUnit() != null ? line.salesUnit() :
+                        (product.getSalesUnit() != null ? product.getSalesUnit() : "CAR"))
+                .netAmount(lineTotal)
+                .currency(currency)
+                .shipToCity(dto.shipToCity())
+                .shipToCountry(dto.shipToCountry())
+                .transportMethod(dto.transportMethod())
+                .requestedDeliveryDate(dto.requestedDeliveryDate())
+                .plannedDeliveryDate(dto.requestedDeliveryDate())
+                .goodsIssueDate(null)
+                .build();
+        return orderRepository.save(order);
     }
 }
 

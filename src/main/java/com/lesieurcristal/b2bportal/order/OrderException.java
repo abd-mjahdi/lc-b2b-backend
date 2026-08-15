@@ -26,4 +26,12 @@ public class OrderException extends RuntimeException {
     public static OrderException noCustomerAssociated() {
         return new OrderException(HttpStatus.BAD_REQUEST, "NO_CUSTOMER_ASSOCIATED", "Aucun numéro client associé à cet utilisateur");
     }
+
+    public static OrderException duplicateCustomerReference(String reference) {
+        return new OrderException(
+                HttpStatus.CONFLICT,
+                "DUPLICATE_CUSTOMER_ORDER_REFERENCE",
+                "La référence commande client « " + reference + " » est déjà utilisée."
+        );
+    }
 }

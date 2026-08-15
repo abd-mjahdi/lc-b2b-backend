@@ -75,6 +75,13 @@ public class InvoiceDispute {
     @Builder.Default
     private DisputeStatus status = DisputeStatus.PENDING;
 
+    /**
+     * Snapshot of {@code erp_mock.invoices.invoice_status} before the dispute
+     * flipped it to {@code disputed}. Restored on approve/reject.
+     */
+    @Column(name = "previous_invoice_status", length = 20)
+    private String previousInvoiceStatus;
+
     /** Commentaire écrit par l'administrateur lors du rejet ou de l'approbation. */
     @Column(name = "resolution_note", columnDefinition = "TEXT")
     private String resolutionNote;

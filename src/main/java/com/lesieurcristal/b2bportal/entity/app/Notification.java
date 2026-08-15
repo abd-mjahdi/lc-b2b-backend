@@ -28,14 +28,9 @@ import java.time.OffsetDateTime;
  * poussée en temps réel sur le tableau de bord de l'utilisateur via
  * un endpoint SSE.
  *
- * <p>Une notification peut viser :
- * <ul>
- *   <li>Un utilisateur client précis ({@link #recipientUser} non null
- *       et {@link #recipientRole} = CLIENT).</li>
- *   <li>Tous les administrateurs ({@link #recipientUser} null et
- *       {@link #recipientRole} = ADMIN) — la diffusion est faite par
- *       le service.</li>
- * </ul>
+ * <p>Une notification vise un utilisateur précis ({@link #recipientUser}).
+ * Les alertes « broadcast » admin sont matérialisées en une ligne par
+ * administrateur afin d'isoler {@link #isRead}.</p>
  */
 @Entity
 @Table(name = "notifications", schema = "app")
@@ -55,7 +50,7 @@ public class Notification {
     @Column(name = "id", nullable = false)
     private Long id;
 
-    /** NULL si la notification est destinée à tous les admins. */
+    /** Destinataire (toujours renseigné pour les nouvelles notifications). */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "recipient_user_id", nullable = true)
     private User recipientUser;

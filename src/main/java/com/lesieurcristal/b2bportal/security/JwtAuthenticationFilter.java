@@ -58,9 +58,22 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
 
     private String resolveBearerToken(HttpServletRequest request) {
         String header = request.getHeader(AUTHORIZATION_HEADER);
-        if (!StringUtils.hasText(header) || !header.startsWith(BEARER_PREFIX)) {
-            return null;
+        if (StringUtils.hasText(header) && header.startsWith(BEARER_PREFIX)) {
+            return header.substring(BEARER_PREFIX.length()).trim();
         }
-        return header.substring(BEARER_PREFIX.length()).trim();
+
+        // EventSource cannot set Authorization headers — allow query token for the SSE stream only.
+        if (isNotificationStream(request)) {
+            String queryToken = request.getParameter("access_token");
+            if (StringUtils.hasText(queryToken)) {
+                return queryToken.trim();
+            }
+        }
+        return null;
+    }
+
+    private static boolean isNotificationStream(HttpServletRequest request) {
+        String uri = request.getRequestURI();
+        return uri != null && uri.endsWith("/api/notifications/stream");
     }
 }

@@ -10,6 +10,7 @@ import java.util.List;
  */
 public record OrderSubmissionResponseDto(
         String orderNumber,
+        String orderGroupId,
         String customerOrderReference,
         LocalDate orderDate,
         LocalDate requestedDeliveryDate,
@@ -20,6 +21,7 @@ public record OrderSubmissionResponseDto(
         String transportMethod,
         String status,
         int quantityOrdered,
+        int lineCount,
         List<String> linkedSampleIds,
         OffsetDateTime createdAt
 ) {

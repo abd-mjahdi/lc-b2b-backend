@@ -134,10 +134,10 @@ class OrderServiceTest {
                 .build();
 
         org.springframework.data.domain.Pageable pageable = org.springframework.data.domain.PageRequest.of(0, 10);
-        when(orderRepository.findFilteredOrders("CUST0001", null, null, null, pageable))
+        when(orderRepository.findFilteredOrders("CUST0001", null, null, null, null, pageable))
                 .thenReturn(new org.springframework.data.domain.PageImpl<>(List.of(order)));
 
-        org.springframework.data.domain.Page<OrderResponseDto> result = orderService.getOrdersForCurrentUser(null, null, null, pageable);
+        org.springframework.data.domain.Page<OrderResponseDto> result = orderService.getOrdersForCurrentUser(null, null, null, null, pageable);
 
         assertThat(result.getContent()).hasSize(1);
         OrderResponseDto dto = result.getContent().get(0);
@@ -209,6 +209,7 @@ class OrderServiceTest {
                 .build();
         Order order = Order.builder()
                 .orderNumber("4500010001")
+                .orderGroupId("OG-TESTGROUP001")
                 .orderDate(LocalDate.of(2026, 5, 5))
                 .customer(customer)
                 .customerOrderReference("BC-AA-0512")
@@ -226,12 +227,13 @@ class OrderServiceTest {
                 .build();
 
         when(orderRepository.findByOrderNumberWithInvoiceAndStatus("4500010001")).thenReturn(Optional.of(order));
-        when(orderRepository.findByCustomerNumberAndCustomerOrderReference("CUST0001", "BC-AA-0512"))
+        when(orderRepository.findByOrderGroupIdWithInvoiceAndStatus("OG-TESTGROUP001"))
                 .thenReturn(List.of(order));
 
         OrderDetailDto detail = orderService.getOrderDetail("4500010001");
 
         assertThat(detail.orderNumber()).isEqualTo("4500010001");
+        assertThat(detail.orderGroupId()).isEqualTo("OG-TESTGROUP001");
         assertThat(detail.lines()).hasSize(1);
         assertThat(detail.lines().get(0).productCode()).isEqualTo("HTO-001");
         assertThat(detail.invoice()).isNotNull();
@@ -261,7 +263,11 @@ class OrderServiceTest {
         authenticateAsUser(null, UserRole.ADMIN);
 
         Customer customer = Customer.builder().customerNumber("CUST0001").companyName("Client 1").build();
-        Order order = Order.builder().orderNumber("4500010005").customer(customer).build();
+        Order order = Order.builder()
+                .orderNumber("4500010005")
+                .orderGroupId("OG-SINGLE005")
+                .customer(customer)
+                .build();
         OrderStatus existing = OrderStatus.builder()
                 .orderNumber("4500010005")
                 .order(order)
@@ -278,6 +284,7 @@ class OrderServiceTest {
                 .build();
 
         when(orderRepository.findByOrderNumberWithInvoiceAndStatus("4500010005")).thenReturn(Optional.of(order));
+        when(orderRepository.findByOrderGroupIdWithInvoiceAndStatus("OG-SINGLE005")).thenReturn(List.of(order));
         when(orderStatusRepository.findByOrderNumber("4500010005")).thenReturn(Optional.of(existing));
         when(orderStatusRepository.save(any(OrderStatus.class))).thenAnswer(inv -> inv.getArgument(0));
         when(userRepository.findByCustomer_CustomerNumber("CUST0001")).thenReturn(List.of(clientUser));
@@ -307,7 +314,98 @@ class OrderServiceTest {
                 eq("ORDER_STATUS_CHANGED"),
                 eq("ORDER"),
                 eq("4500010005"),
-                eq("/client/orders/4500010005")
+                eq("/dashboard/commandes/4500010005")
         );
+    }
+
+    @Test
+    void updateOrderStatus_appliesToAllLinesInGroup() {
+        authenticateAsUser(null, UserRole.ADMIN);
+
+        Customer customer = Customer.builder().customerNumber("CUST0001").build();
+        Order line1 = Order.builder()
+                .orderNumber("4500010010")
+                .orderGroupId("OG-MULTI001")
+                .customer(customer)
+                .build();
+        Order line2 = Order.builder()
+                .orderNumber("4500010011")
+                .orderGroupId("OG-MULTI001")
+                .customer(customer)
+                .build();
+        OrderStatus status1 = OrderStatus.builder()
+                .orderNumber("4500010010")
+                .order(line1)
+                .currentStatus("confirmed")
+                .statusUpdatedAt(OffsetDateTime.now().minusDays(1))
+                .build();
+        OrderStatus status2 = OrderStatus.builder()
+                .orderNumber("4500010011")
+                .order(line2)
+                .currentStatus("confirmed")
+                .statusUpdatedAt(OffsetDateTime.now().minusDays(1))
+                .build();
+
+        when(orderRepository.findByOrderNumberWithInvoiceAndStatus("4500010010")).thenReturn(Optional.of(line1));
+        when(orderRepository.findByOrderGroupIdWithInvoiceAndStatus("OG-MULTI001"))
+                .thenReturn(List.of(line1, line2));
+        when(orderStatusRepository.findByOrderNumber("4500010010")).thenReturn(Optional.of(status1));
+        when(orderStatusRepository.findByOrderNumber("4500010011")).thenReturn(Optional.of(status2));
+        when(orderStatusRepository.save(any(OrderStatus.class))).thenAnswer(inv -> inv.getArgument(0));
+        when(userRepository.findByCustomer_CustomerNumber("CUST0001")).thenReturn(List.of());
+
+        UpdateOrderStatusDto dto = new UpdateOrderStatusDto("shipped", null, null, null);
+        OrderStatusResponseDto result = orderService.updateOrderStatus("4500010010", dto);
+
+        assertThat(result.currentStatus()).isEqualTo("shipped");
+        ArgumentCaptor<OrderStatus> statusCaptor = ArgumentCaptor.forClass(OrderStatus.class);
+        verify(orderStatusRepository, org.mockito.Mockito.times(2)).save(statusCaptor.capture());
+        assertThat(statusCaptor.getAllValues())
+                .extracting(OrderStatus::getCurrentStatus)
+                .containsOnly("shipped");
+        assertThat(statusCaptor.getAllValues())
+                .extracting(OrderStatus::getOrderNumber)
+                .containsExactlyInAnyOrder("4500010010", "4500010011");
+    }
+
+    @Test
+    void getOrderDetail_groupsByOrderGroupIdNotByClientReference() {
+        authenticateAsUser("CUST0001", UserRole.CLIENT);
+
+        Customer customer = Customer.builder().customerNumber("CUST0001").build();
+        Order lineA = Order.builder()
+                .orderNumber("4500010020")
+                .orderGroupId("OG-GROUP-A")
+                .customer(customer)
+                .customerOrderReference("BC-REUSED")
+                .productCode("HTO-001")
+                .productLabel("Huile A")
+                .quantityOrdered(new BigDecimal("10"))
+                .netAmount(new BigDecimal("1000"))
+                .currency("MAD")
+                .orderDate(LocalDate.of(2026, 5, 1))
+                .build();
+        Order lineB = Order.builder()
+                .orderNumber("4500010021")
+                .orderGroupId("OG-GROUP-A")
+                .customer(customer)
+                .customerOrderReference("BC-REUSED")
+                .productCode("HTO-002")
+                .productLabel("Huile B")
+                .quantityOrdered(new BigDecimal("5"))
+                .netAmount(new BigDecimal("500"))
+                .currency("MAD")
+                .orderDate(LocalDate.of(2026, 5, 1))
+                .build();
+
+        when(orderRepository.findByOrderNumberWithInvoiceAndStatus("4500010020")).thenReturn(Optional.of(lineA));
+        when(orderRepository.findByOrderGroupIdWithInvoiceAndStatus("OG-GROUP-A"))
+                .thenReturn(List.of(lineA, lineB));
+
+        OrderDetailDto detail = orderService.getOrderDetail("4500010020");
+
+        assertThat(detail.orderGroupId()).isEqualTo("OG-GROUP-A");
+        assertThat(detail.lines()).hasSize(2);
+        assertThat(detail.totalNetAmount()).isEqualByComparingTo("1500");
     }
 }

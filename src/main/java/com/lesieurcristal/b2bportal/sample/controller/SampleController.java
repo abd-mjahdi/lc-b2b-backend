@@ -41,7 +41,7 @@ public class SampleController {
     @Operation(summary = "Liste des demandes d'échantillons (admin = tout, client = siennes)")
     @GetMapping
     public ResponseEntity<List<SampleRequestResponseDto>> list() {
-        return ResponseEntity.ok(sampleService.getSamplesForCurrentUser());
+        return ResponseEntity.ok(sampleService.listSamplesForCurrentUser());
     }
 
     @Operation(summary = "Détail d'une demande")
