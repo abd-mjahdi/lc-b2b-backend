@@ -71,6 +71,11 @@ public class Product {
     @Column(name = "image_url", length = 500)
     private String imageUrl;
 
+    /** When false, hidden from the catalog but kept for historical FKs. */
+    @Column(name = "is_active", nullable = false)
+    @Builder.Default
+    private Boolean isActive = true;
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

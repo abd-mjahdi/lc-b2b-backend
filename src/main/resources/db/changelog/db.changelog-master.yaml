@@ -35,5 +35,8 @@ databaseChangeLog:
   - include:
       file: V10_order_number_sequence.sql
       relativeToChangelogFile: true
+  - include:
+      file: V11_official_b2b_catalog.sql
+      relativeToChangelogFile: true
 
   

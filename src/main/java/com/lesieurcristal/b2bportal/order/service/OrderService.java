@@ -356,8 +356,7 @@ public class OrderService {
         List<Order> createdLines = new ArrayList<>();
 
         for (CreateOrderRequestDto.OrderLine line : dto.orderLines()) {
-            Product product = productRepository.findById(line.productCode())
-                    .orElseThrow(() -> new IllegalArgumentException("Produit inconnu : " + line.productCode()));
+            Product product = requireActiveProduct(line.productCode());
 
             BigDecimal unitPrice = product.getUnitPrice() != null
                     ? product.getUnitPrice()
@@ -396,8 +395,7 @@ public class OrderService {
         List<String> linkedSampleIds = new ArrayList<>();
         if (dto.sampleProductCodes() != null && !dto.sampleProductCodes().isEmpty()) {
             for (CreateOrderRequestDto.SampleLine sample : dto.sampleProductCodes()) {
-                Product product = productRepository.findById(sample.productCode())
-                        .orElseThrow(() -> new IllegalArgumentException("Produit échantillon inconnu : " + sample.productCode()));
+                Product product = requireActiveProduct(sample.productCode());
                 SampleRequest sr = sampleService.createLinkedSampleRequest(
                         customer, user, product, sample.quantity(), firstOrderNumber);
                 linkedSampleIds.add(sr.getId().toString());
@@ -488,6 +486,15 @@ public class OrderService {
                 .goodsIssueDate(null)
                 .build();
         return orderRepository.save(order);
+    }
+
+    private Product requireActiveProduct(String productCode) {
+        Product product = productRepository.findById(productCode)
+                .orElseThrow(() -> new IllegalArgumentException("Produit inconnu : " + productCode));
+        if (!Boolean.TRUE.equals(product.getIsActive())) {
+            throw new IllegalArgumentException("Produit inconnu : " + productCode);
+        }
+        return product;
     }
 }
 

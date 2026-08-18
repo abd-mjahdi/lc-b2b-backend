@@ -9,9 +9,9 @@ import java.util.List;
 @Repository
 public interface ProductRepository extends JpaRepository<Product, String> {
 
-    List<Product> findByIsSampleableTrueOrderByCategoryAscNameAsc();
+    List<Product> findByIsActiveTrueAndIsSampleableTrueOrderByCategoryAscNameAsc();
 
     List<Product> findByCategoryOrderByNameAsc(String category);
 
-    List<Product> findAllByOrderByCategoryAscNameAsc();
+    List<Product> findByIsActiveTrueOrderByCategoryAscNameAsc();
 }

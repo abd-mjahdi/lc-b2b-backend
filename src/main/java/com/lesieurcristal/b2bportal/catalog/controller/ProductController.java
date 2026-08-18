@@ -26,7 +26,7 @@ public class ProductController {
     @GetMapping
     public ResponseEntity<List<ProductDto>> listAll() {
         return ResponseEntity.ok(productRepository
-                .findAllByOrderByCategoryAscNameAsc()
+                .findByIsActiveTrueOrderByCategoryAscNameAsc()
                 .stream().map(ProductDto::from).toList());
     }
 
@@ -34,7 +34,7 @@ public class ProductController {
     @GetMapping("/sampleable")
     public ResponseEntity<List<ProductDto>> listSampleable() {
         return ResponseEntity.ok(productRepository
-                .findByIsSampleableTrueOrderByCategoryAscNameAsc()
+                .findByIsActiveTrueAndIsSampleableTrueOrderByCategoryAscNameAsc()
                 .stream().map(ProductDto::from).toList());
     }
 }

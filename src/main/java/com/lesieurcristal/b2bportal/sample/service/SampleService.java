@@ -58,6 +58,9 @@ public class SampleService {
 
         Product product = productRepository.findById(dto.productCode())
                 .orElseThrow(() -> new EntityNotFoundException("Produit inconnu : " + dto.productCode()));
+        if (!Boolean.TRUE.equals(product.getIsActive())) {
+            throw new EntityNotFoundException("Produit inconnu : " + dto.productCode());
+        }
 
         validateSampleableProduct(product, dto.quantity());
 
@@ -127,6 +130,9 @@ public class SampleService {
     }
 
     private static void validateSampleableProduct(Product product, BigDecimal quantity) {
+        if (!Boolean.TRUE.equals(product.getIsActive())) {
+            throw new IllegalArgumentException("Produit inconnu : " + product.getCode());
+        }
         if (!Boolean.TRUE.equals(product.getIsSampleable())) {
             throw new IllegalArgumentException("Ce produit n'est pas éligible aux échantillons.");
         }
