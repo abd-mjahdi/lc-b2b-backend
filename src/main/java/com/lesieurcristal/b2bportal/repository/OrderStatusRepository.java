@@ -10,4 +10,7 @@ public interface OrderStatusRepository extends JpaRepository<OrderStatus, String
     Optional<OrderStatus> findByOrderNumber(String orderNumber);
 
     long countByCurrentStatus(String currentStatus);
+
+    java.util.List<OrderStatus> findByStatusUpdatedAtGreaterThanOrderByStatusUpdatedAtAsc(
+            java.time.OffsetDateTime cursor);
 }

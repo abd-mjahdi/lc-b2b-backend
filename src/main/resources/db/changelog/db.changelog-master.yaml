@@ -38,5 +38,8 @@ databaseChangeLog:
   - include:
       file: V11_official_b2b_catalog.sql
       relativeToChangelogFile: true
+  - include:
+      file: V12_erp_outbox_and_inbound.sql
+      relativeToChangelogFile: true
 
   

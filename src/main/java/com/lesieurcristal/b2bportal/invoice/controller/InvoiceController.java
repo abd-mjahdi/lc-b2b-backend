@@ -4,8 +4,8 @@ import com.lesieurcristal.b2bportal.config.OpenApiConfig;
 import com.lesieurcristal.b2bportal.entity.app.enums.UserRole;
 import com.lesieurcristal.b2bportal.entity.erpmock.Invoice;
 import com.lesieurcristal.b2bportal.entity.erpmock.Order;
+import com.lesieurcristal.b2bportal.erp.connector.ErpInvoiceConnector;
 import com.lesieurcristal.b2bportal.invoice.service.InvoiceDocumentService;
-import com.lesieurcristal.b2bportal.repository.InvoiceRepository;
 import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
 import com.lesieurcristal.b2bportal.security.SecurityUtils;
 import io.swagger.v3.oas.annotations.Operation;
@@ -42,7 +42,7 @@ import java.util.List;
 @PreAuthorize("isAuthenticated()")
 public class InvoiceController {
 
-    private final InvoiceRepository invoiceRepository;
+    private final ErpInvoiceConnector erpInvoiceConnector;
     private final InvoiceDocumentService invoiceDocumentService;
 
     @Operation(summary = "Liste des factures du client connecté")
@@ -54,8 +54,8 @@ public class InvoiceController {
             // Admin : on ne montre pas de factures par défaut ici (route admin dédiée)
             return ResponseEntity.ok(List.of());
         }
-        List<InvoiceDto> result = invoiceRepository
-                .findByCustomer_CustomerNumberWithOrderOrderByInvoiceDateDesc(current.getCustomerNumber())
+        List<InvoiceDto> result = erpInvoiceConnector
+                .findByCustomerNumber(current.getCustomerNumber())
                 .stream()
                 .map(InvoiceDto::from)
                 .toList();
@@ -79,7 +79,7 @@ public class InvoiceController {
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.UNAUTHORIZED, "Non authentifié"));
 
-        Invoice invoice = invoiceRepository.findByInvoiceNumberWithOrder(invoiceNumber)
+        Invoice invoice = erpInvoiceConnector.findByInvoiceNumber(invoiceNumber)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable"));
 
         if (current.getRole() != UserRole.ADMIN) {

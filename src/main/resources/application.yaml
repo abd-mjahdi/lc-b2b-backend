@@ -52,6 +52,10 @@ app:
   documents:
     storage-dir: ${DOCUMENTS_STORAGE_DIR:./storage/documents}
 
+  erp:
+    outbound-retry-ms: ${ERP_OUTBOUND_RETRY_MS:30000}
+    inbound-sync-ms: ${ERP_INBOUND_SYNC_MS:60000}
+
 springdoc:
   swagger-ui:
     path: /swagger-ui.html

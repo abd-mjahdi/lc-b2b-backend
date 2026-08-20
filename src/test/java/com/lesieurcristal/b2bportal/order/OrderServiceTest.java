@@ -20,6 +20,8 @@ import com.lesieurcristal.b2bportal.repository.OrderStatusRepository;
 import com.lesieurcristal.b2bportal.repository.ProductRepository;
 import com.lesieurcristal.b2bportal.repository.UserRepository;
 import com.lesieurcristal.b2bportal.sample.service.SampleService;
+import com.lesieurcristal.b2bportal.erp.connector.MockErpCustomerConnector;
+import com.lesieurcristal.b2bportal.erp.outbox.ErpOutboxService;
 import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -68,21 +70,25 @@ class OrderServiceTest {
     @Mock
     private PortalNotificationService portalNotificationService;
 
+    @Mock
+    private ErpOutboxService erpOutboxService;
+
     private ErpOrderConnector erpOrderConnector;
     private OrderService orderService;
 
     @BeforeEach
     void setUp() {
-        erpOrderConnector = new MockErpOrderConnector(orderRepository, orderStatusRepository);
+        erpOrderConnector = new MockErpOrderConnector(orderRepository, orderStatusRepository, customerRepository);
         orderService = new OrderService(
                 erpOrderConnector,
                 orderRepository,
                 orderStatusRepository,
                 productRepository,
-                customerRepository,
+                new MockErpCustomerConnector(customerRepository),
                 userRepository,
                 sampleService,
-                portalNotificationService
+                portalNotificationService,
+                erpOutboxService
         );
     }
 

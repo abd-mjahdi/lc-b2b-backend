@@ -11,13 +11,16 @@ import com.lesieurcristal.b2bportal.entity.erpmock.OrderStatus;
 import com.lesieurcristal.b2bportal.notification.service.PortalNotificationService;
 import com.lesieurcristal.b2bportal.order.OrderException;
 import com.lesieurcristal.b2bportal.order.connector.ErpOrderConnector;
+import com.lesieurcristal.b2bportal.order.connector.ErpSubmitOrderCommand;
+import com.lesieurcristal.b2bportal.order.connector.ErpSubmitOrderResult;
 import com.lesieurcristal.b2bportal.order.dto.CreateOrderRequestDto;
+import com.lesieurcristal.b2bportal.erp.connector.ErpCustomerConnector;
+import com.lesieurcristal.b2bportal.erp.outbox.ErpOutboxService;
 import com.lesieurcristal.b2bportal.order.dto.OrderDetailDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderStatusResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.OrderSubmissionResponseDto;
 import com.lesieurcristal.b2bportal.order.dto.UpdateOrderStatusDto;
-import com.lesieurcristal.b2bportal.repository.CustomerRepository;
 import com.lesieurcristal.b2bportal.repository.OrderRepository;
 import com.lesieurcristal.b2bportal.repository.OrderStatusRepository;
 import com.lesieurcristal.b2bportal.repository.ProductRepository;
@@ -47,10 +50,11 @@ public class OrderService {
     private final OrderRepository orderRepository;
     private final OrderStatusRepository orderStatusRepository;
     private final ProductRepository productRepository;
-    private final CustomerRepository customerRepository;
+    private final ErpCustomerConnector erpCustomerConnector;
     private final UserRepository userRepository;
     private final SampleService sampleService;
     private final PortalNotificationService portalNotificationService;
+    private final ErpOutboxService erpOutboxService;
 
     /**
      * Fetch order history for the currently logged-in customer.
@@ -319,13 +323,8 @@ public class OrderService {
     // =========================================================================
 
     /**
-     * Soumet une nouvelle commande. Crée les lignes de commande dans
-     * {@code erp_mock.orders} et lie éventuellement des échantillons.
-     *
-     * <p>Pour le MVP, on génère un numéro de commande au format
-     * "4500NNNNNN" car le connecteur ERP mock ne crée pas vraiment
-     * d'ordre SAP. Le commit se fait à la fin (transaction gérée par
-     * Spring) pour garantir la cohérence.</p>
+     * Soumet une nouvelle commande. Enregistre un message outbound, puis le
+     * connecteur ERP crée les lignes ({@code erp_mock} aujourd'hui, SAP plus tard).
      */
     @Transactional
     public OrderSubmissionResponseDto submitOrder(CreateOrderRequestDto dto) {
@@ -335,25 +334,23 @@ public class OrderService {
             throw new SecurityException("Seuls les clients peuvent passer commande");
         }
 
-        Customer customer = customerRepository.findById(current.getCustomerNumber())
+        Customer customer = erpCustomerConnector.findByCustomerNumber(current.getCustomerNumber())
                 .orElseThrow(() -> new IllegalStateException("Client inconnu"));
         User user = userRepository.findById(current.getId()).orElse(null);
 
         String customerRef = dto.customerOrderReference();
         if (customerRef != null && !customerRef.isBlank()
-                && orderRepository.existsByCustomer_CustomerNumberAndCustomerOrderReference(
+                && erpOrderConnector.existsCustomerOrderReference(
                 customer.getCustomerNumber(), customerRef.trim())) {
             throw OrderException.duplicateCustomerReference(customerRef.trim());
         }
 
-        // One group id for every line of this submission
         String orderGroupId = "OG-" + UUID.randomUUID().toString().replace("-", "").substring(0, 16).toUpperCase();
 
-        // 1. Calcul du montant total et résolution des produits
         BigDecimal totalNet = BigDecimal.ZERO;
         String currency = "MAD";
         int totalQty = 0;
-        List<Order> createdLines = new ArrayList<>();
+        List<ErpSubmitOrderCommand.Line> erpLines = new ArrayList<>();
 
         for (CreateOrderRequestDto.OrderLine line : dto.orderLines()) {
             Product product = requireActiveProduct(line.productCode());
@@ -365,33 +362,35 @@ public class OrderService {
             totalNet = totalNet.add(lineTotal);
             totalQty += line.quantity().intValue();
 
-            Order savedOrder = persistNewOrderLine(
-                    orderGroupId,
-                    customer,
-                    customerRef != null ? customerRef.trim() : null,
-                    product,
-                    line,
+            String salesUnit = line.salesUnit() != null ? line.salesUnit() :
+                    (product.getSalesUnit() != null ? product.getSalesUnit() : "CAR");
+            erpLines.add(new ErpSubmitOrderCommand.Line(
+                    product.getCode(),
+                    product.getName(),
+                    line.quantity(),
+                    salesUnit,
                     lineTotal,
-                    currency,
-                    dto
-            );
-            createdLines.add(savedOrder);
-
-            // Création du statut en direct (PK = orderNumber, FK via @MapsId)
-            orderStatusRepository.save(OrderStatus.builder()
-                    .order(savedOrder)
-                    .orderNumber(savedOrder.getOrderNumber())
-                    .currentStatus("confirmed")
-                    .statusUpdatedAt(OffsetDateTime.now())
-                    .expectedDeliveryDate(dto.requestedDeliveryDate())
-                    .carrierName(null)
-                    .carrierReference(null)
-                    .build());
+                    currency
+            ));
         }
 
-        String firstOrderNumber = createdLines.get(0).getOrderNumber();
+        ErpSubmitOrderResult erpResult = erpOutboxService.submitOrder(new ErpSubmitOrderCommand(
+                orderGroupId,
+                customer.getCustomerNumber(),
+                customerRef != null ? customerRef.trim() : null,
+                LocalDate.now(),
+                dto.requestedDeliveryDate(),
+                dto.shipToCity(),
+                dto.shipToCountry(),
+                dto.transportMethod(),
+                erpLines
+        ));
 
-        // 2. Liaison des échantillons groupés (PRD §2.1 — économie de transport)
+        if (erpResult.orderNumbers() == null || erpResult.orderNumbers().isEmpty()) {
+            throw new IllegalStateException("Le connecteur ERP n'a renvoyé aucun numéro de commande");
+        }
+        String firstOrderNumber = erpResult.orderNumbers().get(0);
+
         List<String> linkedSampleIds = new ArrayList<>();
         if (dto.sampleProductCodes() != null && !dto.sampleProductCodes().isEmpty()) {
             for (CreateOrderRequestDto.SampleLine sample : dto.sampleProductCodes()) {
@@ -402,11 +401,10 @@ public class OrderService {
             }
         }
 
-        // 3. Notification admin (PRD §2.2 flux aller)
         String message = String.format(
                 "Nouvelle commande #%s (%d ligne(s), groupe %s, %d échantillon(s)) soumise par %s (%s).",
                 firstOrderNumber,
-                createdLines.size(),
+                erpResult.orderNumbers().size(),
                 orderGroupId,
                 linkedSampleIds.size(),
                 customer.getCompanyName(),
@@ -423,7 +421,7 @@ public class OrderService {
 
         log.info("Commande groupe {} créée pour {} (tête={}, {} lignes, {} échantillons)",
                 orderGroupId, customer.getCustomerNumber(), firstOrderNumber,
-                createdLines.size(), linkedSampleIds.size());
+                erpResult.orderNumbers().size(), linkedSampleIds.size());
 
         return new OrderSubmissionResponseDto(
                 firstOrderNumber,
@@ -438,54 +436,10 @@ public class OrderService {
                 dto.transportMethod(),
                 "confirmed",
                 totalQty,
-                createdLines.size(),
+                erpResult.orderNumbers().size(),
                 linkedSampleIds,
                 OffsetDateTime.now()
         );
-    }
-
-    /**
-     * Inserts a line with a sequence-allocated SAP-like order number
-     * ({@code erp_mock.order_number_seq}) — no exists-then-insert race.
-     */
-    private Order persistNewOrderLine(
-            String orderGroupId,
-            Customer customer,
-            String customerRef,
-            Product product,
-            CreateOrderRequestDto.OrderLine line,
-            BigDecimal lineTotal,
-            String currency,
-            CreateOrderRequestDto dto) {
-
-        Long next = orderRepository.nextOrderNumberSeq();
-        if (next == null) {
-            throw new IllegalStateException("Impossible d'allouer un numéro de commande");
-        }
-        String orderNumber = String.valueOf(next);
-
-        Order order = Order.builder()
-                .orderNumber(orderNumber)
-                .orderGroupId(orderGroupId)
-                .orderDate(LocalDate.now())
-                .customer(customer)
-                .customerOrderReference(customerRef)
-                .productCode(product.getCode())
-                .productLabel(product.getName())
-                .quantityOrdered(line.quantity())
-                .quantityShipped(BigDecimal.ZERO)
-                .salesUnit(line.salesUnit() != null ? line.salesUnit() :
-                        (product.getSalesUnit() != null ? product.getSalesUnit() : "CAR"))
-                .netAmount(lineTotal)
-                .currency(currency)
-                .shipToCity(dto.shipToCity())
-                .shipToCountry(dto.shipToCountry())
-                .transportMethod(dto.transportMethod())
-                .requestedDeliveryDate(dto.requestedDeliveryDate())
-                .plannedDeliveryDate(dto.requestedDeliveryDate())
-                .goodsIssueDate(null)
-                .build();
-        return orderRepository.save(order);
     }
 
     private Product requireActiveProduct(String productCode) {

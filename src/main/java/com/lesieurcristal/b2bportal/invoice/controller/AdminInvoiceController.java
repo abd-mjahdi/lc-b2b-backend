@@ -1,10 +1,10 @@
 package com.lesieurcristal.b2bportal.invoice.controller;
 
 import com.lesieurcristal.b2bportal.config.OpenApiConfig;
+import com.lesieurcristal.b2bportal.erp.connector.ErpInvoiceConnector;
 import com.lesieurcristal.b2bportal.invoice.controller.InvoiceController.InvoiceDetailDto;
 import com.lesieurcristal.b2bportal.invoice.controller.InvoiceController.InvoiceDto;
 import com.lesieurcristal.b2bportal.invoice.service.InvoiceDocumentService;
-import com.lesieurcristal.b2bportal.repository.InvoiceRepository;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.security.SecurityRequirement;
 import io.swagger.v3.oas.annotations.tags.Tag;
@@ -28,14 +28,14 @@ import java.util.List;
 @PreAuthorize("hasRole('ADMIN')")
 public class AdminInvoiceController {
 
-    private final InvoiceRepository invoiceRepository;
+    private final ErpInvoiceConnector erpInvoiceConnector;
     private final InvoiceDocumentService invoiceDocumentService;
 
     @Operation(summary = "Liste des factures d'un client")
     @GetMapping("/customers/{customerNumber}/invoices")
     public ResponseEntity<List<InvoiceDto>> listForCustomer(@PathVariable String customerNumber) {
-        List<InvoiceDto> result = invoiceRepository
-                .findByCustomer_CustomerNumberWithOrderOrderByInvoiceDateDesc(customerNumber)
+        List<InvoiceDto> result = erpInvoiceConnector
+                .findByCustomerNumber(customerNumber)
                 .stream()
                 .map(InvoiceDto::from)
                 .toList();
@@ -46,7 +46,7 @@ public class AdminInvoiceController {
     @GetMapping("/invoices/{invoiceNumber}")
     public ResponseEntity<InvoiceDetailDto> getInvoice(@PathVariable String invoiceNumber) {
         return ResponseEntity.ok(InvoiceDetailDto.from(
-                invoiceRepository.findByInvoiceNumberWithOrder(invoiceNumber)
+                erpInvoiceConnector.findByInvoiceNumber(invoiceNumber)
                         .orElseThrow(() -> new jakarta.persistence.EntityNotFoundException(
                                 "Facture introuvable : " + invoiceNumber))));
     }

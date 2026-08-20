@@ -5,19 +5,12 @@ import com.lesieurcristal.b2bportal.order.dto.OrderStatusResponseDto;
 
 import java.util.Optional;
 
+/**
+ * Door to ERP order data. {@link MockErpOrderConnector} talks to {@code erp_mock}.
+ * A future SAP implementation keeps the same methods.
+ */
 public interface ErpOrderConnector {
 
-    /**
-     * Retrieve order history for a given customer number, including invoice status, with pagination and filtering.
-     *
-     * @param customerNumber customer identification number in ERP
-     * @param startDate filter orders from this date
-     * @param endDate filter orders to this date
-     * @param status logistics status ({@code order_status.currentStatus})
-     * @param invoiceStatus payment status ({@code invoices.invoice_status})
-     * @param pageable pagination and sorting information
-     * @return paginated list of orders for the specified customer
-     */
     org.springframework.data.domain.Page<OrderResponseDto> getOrdersByCustomerNumber(
             String customerNumber,
             java.time.LocalDate startDate,
@@ -26,11 +19,13 @@ public interface ErpOrderConnector {
             String invoiceStatus,
             org.springframework.data.domain.Pageable pageable);
 
-    /**
-     * Retrieve live order status directly from ERP (no caching).
-     *
-     * @param orderNumber order identification number
-     * @return optional order status details if found
-     */
     Optional<OrderStatusResponseDto> getOrderStatus(String orderNumber);
+
+    boolean existsCustomerOrderReference(String customerNumber, String customerOrderReference);
+
+    /**
+     * Creates the sales documents in ERP and returns allocated order numbers.
+     * Must be idempotent on {@code command.orderGroupId()}.
+     */
+    ErpSubmitOrderResult submitOrder(ErpSubmitOrderCommand command);
 }
