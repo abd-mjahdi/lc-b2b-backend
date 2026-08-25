@@ -1,5 +1,6 @@
 package com.lesieurcristal.b2bportal.config;
 
+import com.lesieurcristal.b2bportal.storage.S3Properties;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -13,7 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 
 @Configuration
-@EnableConfigurationProperties({JwtProperties.class, CorsProperties.class, ActivationProperties.class})
+@EnableConfigurationProperties({JwtProperties.class, CorsProperties.class, ActivationProperties.class, S3Properties.class})
 public class ApplicationConfig {
 
     private static final List<String> LOCAL_ORIGIN_PATTERNS = List.of(
@@ -58,7 +59,7 @@ public class ApplicationConfig {
         configuration.setAllowedOriginPatterns(patterns);
         configuration.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         configuration.setAllowedHeaders(List.of("*"));
-        configuration.setExposedHeaders(List.of("Authorization"));
+        configuration.setExposedHeaders(List.of("Authorization", "Content-Disposition"));
         configuration.setAllowCredentials(true);
         configuration.setMaxAge(3600L);
 

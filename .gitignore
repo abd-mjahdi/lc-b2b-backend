@@ -37,3 +37,6 @@ build/
 
 ### Generated invoice PDFs ###
 /storage/
+
+### Local planning (not committed) ###
+s3_implementation.md

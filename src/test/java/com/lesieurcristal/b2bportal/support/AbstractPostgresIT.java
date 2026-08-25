@@ -3,13 +3,18 @@ package com.lesieurcristal.b2bportal.support;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.testcontainers.containers.GenericContainer;
 import org.testcontainers.containers.PostgreSQLContainer;
+import org.testcontainers.containers.wait.strategy.Wait;
+import org.testcontainers.utility.DockerImageName;
+
+import java.time.Duration;
 
 /**
- * Boots the full Spring context against a real PostgreSQL started by Testcontainers.
+ * Boots the full Spring context against real PostgreSQL and MinIO started by Testcontainers.
  * Liquibase runs on that database. Subclasses should use MockMvc, not mocked repositories.
  *
- * <p>The container is started once per JVM so multiple IT classes can share it.
+ * <p>The containers are started once per JVM so multiple IT classes can share them.
  */
 @SpringBootTest(properties = {
         "app.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
@@ -20,8 +25,18 @@ public abstract class AbstractPostgresIT {
     static final PostgreSQLContainer<?> POSTGRES = new PostgreSQLContainer<>("postgres:16-alpine")
             .withDatabaseName("portail_b2b");
 
+    static final GenericContainer<?> MINIO = new GenericContainer<>(
+            DockerImageName.parse("minio/minio:RELEASE.2025-04-22T22-12-26Z"))
+            .withEnv("MINIO_ROOT_USER", "minioadmin")
+            .withEnv("MINIO_ROOT_PASSWORD", "minioadmin")
+            .withCommand("server", "/data")
+            .withExposedPorts(9000)
+            .waitingFor(Wait.forHttp("/minio/health/live").forPort(9000).forStatusCode(200)
+                    .withStartupTimeout(Duration.ofSeconds(60)));
+
     static {
         POSTGRES.start();
+        MINIO.start();
     }
 
     @DynamicPropertySource
@@ -47,5 +62,12 @@ public abstract class AbstractPostgresIT {
         registry.add("ACTIVATION_PATH", () -> "/activate");
 
         registry.add("spring.task.scheduling.enabled", () -> "false");
+
+        registry.add("S3_ENDPOINT", () -> "http://" + MINIO.getHost() + ":" + MINIO.getMappedPort(9000));
+        registry.add("S3_REGION", () -> "us-east-1");
+        registry.add("S3_BUCKET", () -> "lc-b2b-documents");
+        registry.add("S3_ACCESS_KEY", () -> "minioadmin");
+        registry.add("S3_SECRET_KEY", () -> "minioadmin");
+        registry.add("S3_PATH_STYLE_ACCESS", () -> "true");
     }
 }

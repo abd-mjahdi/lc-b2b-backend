@@ -4,6 +4,7 @@ import com.lesieurcristal.b2bportal.dispute.dto.CreateInvoiceDisputeRequest;
 import com.lesieurcristal.b2bportal.dispute.dto.InvoiceDisputeResponseDto;
 import com.lesieurcristal.b2bportal.entity.app.InvoiceDispute;
 import com.lesieurcristal.b2bportal.entity.app.User;
+import com.lesieurcristal.b2bportal.entity.app.enums.UserRole;
 import com.lesieurcristal.b2bportal.entity.erpmock.Customer;
 import com.lesieurcristal.b2bportal.entity.erpmock.Invoice;
 import com.lesieurcristal.b2bportal.notification.service.PortalNotificationService;
@@ -13,14 +14,21 @@ import com.lesieurcristal.b2bportal.repository.InvoiceRepository;
 import com.lesieurcristal.b2bportal.repository.UserRepository;
 import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
 import com.lesieurcristal.b2bportal.security.SecurityUtils;
+import com.lesieurcristal.b2bportal.storage.ObjectKeys;
+import com.lesieurcristal.b2bportal.storage.ObjectStorage;
+import com.lesieurcristal.b2bportal.storage.UploadValidator;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.Set;
 
 @Slf4j
@@ -37,16 +45,20 @@ public class DisputeService {
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final PortalNotificationService portalNotificationService;
+    private final ObjectStorage objectStorage;
+    private final UploadValidator uploadValidator;
 
     @Transactional
     public InvoiceDisputeResponseDto createDispute(String invoiceNumber,
                                                    CreateInvoiceDisputeRequest dto,
-                                                   String filePath) {
+                                                   MultipartFile file) {
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
         if (current.getCustomerNumber() == null) {
             throw new SecurityException("Seuls les clients peuvent contester une facture");
         }
+
+        Optional<UploadValidator.ValidatedUpload> upload = uploadValidator.validateIfPresent(file);
 
         Invoice invoice = invoiceRepository.findById(invoiceNumber)
                 .orElseThrow(() -> new EntityNotFoundException("Facture inconnue : " + invoiceNumber));
@@ -73,10 +85,26 @@ public class DisputeService {
                 .user(user)
                 .reason(dto.reason())
                 .description(dto.description())
-                .filePath(filePath)
                 .status(InvoiceDispute.DisputeStatus.PENDING)
                 .previousInvoiceStatus(previousStatus)
                 .build());
+
+        if (upload.isPresent()) {
+            UploadValidator.ValidatedUpload validated = upload.get();
+            String key = ObjectKeys.dispute(customer.getCustomerNumber(), saved.getId(), validated.extension());
+            try {
+                objectStorage.put(key, validated.bytes(), validated.contentType());
+                saved.setFilePath(key);
+                saved = disputeRepository.save(saved);
+            } catch (RuntimeException e) {
+                try {
+                    objectStorage.delete(key);
+                } catch (RuntimeException ignored) {
+                    log.warn("Nettoyage S3 échoué après échec contestation {}", saved.getId());
+                }
+                throw e;
+            }
+        }
 
         invoice.setInvoiceStatus("disputed");
         invoiceRepository.save(invoice);
@@ -110,15 +138,21 @@ public class DisputeService {
 
     @Transactional(readOnly = true)
     public InvoiceDisputeResponseDto getByIdForCurrentUser(Long id) {
-        AuthenticatedUser current = SecurityUtils.getCurrentUser()
-                .orElseThrow(() -> new IllegalStateException("Non authentifié"));
+        return InvoiceDisputeResponseDto.from(requireOwnedDispute(id));
+    }
+
+    @Transactional(readOnly = true)
+    public AttachmentFile downloadForCurrentUser(Long id) {
+        InvoiceDispute d = requireOwnedDispute(id);
+        return readAttachment(d);
+    }
+
+    @Transactional(readOnly = true)
+    public AttachmentFile downloadForAdmin(Long id) {
+        requireAdmin();
         InvoiceDispute d = disputeRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Contestation introuvable"));
-        if (current.getCustomerNumber() != null
-                && !d.getCustomer().getCustomerNumber().equals(current.getCustomerNumber())) {
-            throw new SecurityException("Accès refusé");
-        }
-        return InvoiceDisputeResponseDto.from(d);
+        return readAttachment(d);
     }
 
     @Transactional(readOnly = true)
@@ -149,7 +183,6 @@ public class DisputeService {
         d.setResolvedAt(OffsetDateTime.now());
         InvoiceDispute saved = disputeRepository.save(d);
 
-        // Restore prior payment state (credit-note / avoir generation is out of scope for this MVP).
         restoreInvoiceStatus(d);
 
         if (d.getUser() != null) {
@@ -200,6 +233,18 @@ public class DisputeService {
         return InvoiceDisputeResponseDto.from(saved);
     }
 
+    private InvoiceDispute requireOwnedDispute(Long id) {
+        AuthenticatedUser current = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new IllegalStateException("Non authentifié"));
+        InvoiceDispute d = disputeRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Contestation introuvable"));
+        if (current.getCustomerNumber() != null
+                && !d.getCustomer().getCustomerNumber().equals(current.getCustomerNumber())) {
+            throw new SecurityException("Accès refusé");
+        }
+        return d;
+    }
+
     private InvoiceDispute requirePendingDispute(Long id) {
         InvoiceDispute d = disputeRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Contestation introuvable"));
@@ -211,11 +256,31 @@ public class DisputeService {
         return d;
     }
 
+    private AttachmentFile readAttachment(InvoiceDispute d) {
+        if (d.getFilePath() == null || d.getFilePath().isBlank()
+                || ObjectKeys.isLegacyFilesystemPath(d.getFilePath())) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable");
+        }
+        byte[] content = objectStorage.get(d.getFilePath())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable"));
+        return new AttachmentFile(
+                content,
+                ObjectKeys.contentTypeOf(d.getFilePath()),
+                ObjectKeys.downloadFilename("justificatif", d.getId(), d.getFilePath()));
+    }
+
+    private static void requireAdmin() {
+        AuthenticatedUser current = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new IllegalStateException("Non authentifié"));
+        if (current.getRole() != UserRole.ADMIN) {
+            throw new SecurityException("Accès refusé");
+        }
+    }
+
     private void restoreInvoiceStatus(InvoiceDispute d) {
         invoiceRepository.findById(d.getInvoiceNumber()).ifPresent(inv -> {
             String restored = d.getPreviousInvoiceStatus();
             if (restored == null || restored.isBlank() || !RESTORABLE_STATUSES.contains(restored)) {
-                // Fallback for legacy disputes created before previous_invoice_status existed
                 restored = inv.getPaymentDate() != null ? "paid" : "unpaid";
             }
             inv.setInvoiceStatus(restored);
@@ -233,5 +298,8 @@ public class DisputeService {
             case DAMAGED_GOODS -> "Produit endommagé";
             case OTHER -> "Autre motif";
         };
+    }
+
+    public record AttachmentFile(byte[] content, String contentType, String filename) {
     }
 }

@@ -4,6 +4,7 @@ import com.lesieurcristal.b2bportal.claim.dto.CreateReclamationRequest;
 import com.lesieurcristal.b2bportal.claim.dto.ReclamationResponseDto;
 import com.lesieurcristal.b2bportal.entity.app.Reclamation;
 import com.lesieurcristal.b2bportal.entity.app.User;
+import com.lesieurcristal.b2bportal.entity.app.enums.UserRole;
 import com.lesieurcristal.b2bportal.entity.erpmock.Customer;
 import com.lesieurcristal.b2bportal.notification.service.PortalNotificationService;
 import com.lesieurcristal.b2bportal.repository.CustomerRepository;
@@ -11,15 +12,24 @@ import com.lesieurcristal.b2bportal.repository.ReclamationRepository;
 import com.lesieurcristal.b2bportal.repository.UserRepository;
 import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
 import com.lesieurcristal.b2bportal.security.SecurityUtils;
+import com.lesieurcristal.b2bportal.storage.ObjectKeys;
+import com.lesieurcristal.b2bportal.storage.ObjectStorage;
+import com.lesieurcristal.b2bportal.storage.UploadValidator;
 import jakarta.persistence.EntityNotFoundException;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.web.multipart.MultipartFile;
+import org.springframework.web.server.ResponseStatusException;
 
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class ReclamationService {
@@ -39,9 +49,11 @@ public class ReclamationService {
     private final CustomerRepository customerRepository;
     private final UserRepository userRepository;
     private final PortalNotificationService portalNotificationService;
+    private final ObjectStorage objectStorage;
+    private final UploadValidator uploadValidator;
 
     @Transactional
-    public ReclamationResponseDto create(CreateReclamationRequest dto) {
+    public ReclamationResponseDto create(CreateReclamationRequest dto, MultipartFile file) {
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
         if (current.getCustomerNumber() == null) {
@@ -51,14 +63,32 @@ public class ReclamationService {
                 .orElseThrow(() -> new EntityNotFoundException("Client inconnu"));
         User user = userRepository.findById(current.getId()).orElse(null);
 
+        Optional<UploadValidator.ValidatedUpload> upload = uploadValidator.validateIfPresent(file);
+
         Reclamation saved = reclamationRepository.save(Reclamation.builder()
                 .customer(customer)
                 .user(user)
                 .lotNumber(dto.lotNumber())
                 .description(dto.description())
-                .attachmentPath(dto.attachmentPath())
                 .status("new")
                 .build());
+
+        if (upload.isPresent()) {
+            UploadValidator.ValidatedUpload validated = upload.get();
+            String key = ObjectKeys.claim(customer.getCustomerNumber(), saved.getId(), validated.extension());
+            try {
+                objectStorage.put(key, validated.bytes(), validated.contentType());
+                saved.setAttachmentPath(key);
+                saved = reclamationRepository.save(saved);
+            } catch (RuntimeException e) {
+                try {
+                    objectStorage.delete(key);
+                } catch (RuntimeException ignored) {
+                    log.warn("Nettoyage S3 échoué après échec réclamation {}", saved.getId());
+                }
+                throw e;
+            }
+        }
 
         portalNotificationService.createAdminBroadcast(
                 "Nouvelle réclamation client",
@@ -96,6 +126,31 @@ public class ReclamationService {
                 .toList();
     }
 
+    @Transactional(readOnly = true)
+    public AttachmentFile downloadForCurrentUser(Long id) {
+        AuthenticatedUser current = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new IllegalStateException("Non authentifié"));
+        Reclamation r = reclamationRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Réclamation introuvable"));
+        if (current.getCustomerNumber() == null
+                || !r.getCustomer().getCustomerNumber().equals(current.getCustomerNumber())) {
+            throw new SecurityException("Accès refusé");
+        }
+        return readAttachment(r);
+    }
+
+    @Transactional(readOnly = true)
+    public AttachmentFile downloadForAdmin(Long id) {
+        AuthenticatedUser current = SecurityUtils.getCurrentUser()
+                .orElseThrow(() -> new IllegalStateException("Non authentifié"));
+        if (current.getRole() != UserRole.ADMIN) {
+            throw new SecurityException("Accès refusé");
+        }
+        Reclamation r = reclamationRepository.findById(id)
+                .orElseThrow(() -> new EntityNotFoundException("Réclamation introuvable"));
+        return readAttachment(r);
+    }
+
     @Transactional
     public ReclamationResponseDto updateStatus(Long id, String status) {
         if (status == null || !ALLOWED_STATUSES.contains(status)) {
@@ -118,6 +173,20 @@ public class ReclamationService {
 
         notifyClaimStatus(saved, status);
         return ReclamationResponseDto.from(saved);
+    }
+
+    private AttachmentFile readAttachment(Reclamation r) {
+        if (r.getAttachmentPath() == null || r.getAttachmentPath().isBlank()
+                || ObjectKeys.isLegacyFilesystemPath(r.getAttachmentPath())
+                || r.getAttachmentPath().startsWith("/uploads/")) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable");
+        }
+        byte[] content = objectStorage.get(r.getAttachmentPath())
+                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable"));
+        return new AttachmentFile(
+                content,
+                ObjectKeys.contentTypeOf(r.getAttachmentPath()),
+                ObjectKeys.downloadFilename("reclamation", r.getId(), r.getAttachmentPath()));
     }
 
     private void notifyClaimStatus(Reclamation r, String status) {
@@ -166,5 +235,8 @@ public class ReclamationService {
     private static String truncate(String s, int max) {
         if (s == null) return "";
         return s.length() <= max ? s : s.substring(0, max - 1) + "…";
+    }
+
+    public record AttachmentFile(byte[] content, String contentType, String filename) {
     }
 }

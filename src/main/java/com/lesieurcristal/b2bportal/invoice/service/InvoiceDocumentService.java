@@ -8,19 +8,16 @@ import com.lesieurcristal.b2bportal.repository.DocumentRepository;
 import com.lesieurcristal.b2bportal.repository.InvoiceRepository;
 import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
 import com.lesieurcristal.b2bportal.security.SecurityUtils;
+import com.lesieurcristal.b2bportal.storage.ObjectKeys;
+import com.lesieurcristal.b2bportal.storage.ObjectStorage;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Value;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-import java.io.IOException;
-import java.nio.file.Files;
-import java.nio.file.Path;
-import java.nio.file.StandardOpenOption;
 import java.util.Optional;
 
 /**
@@ -38,9 +35,7 @@ public class InvoiceDocumentService {
     private final InvoiceRepository invoiceRepository;
     private final DocumentRepository documentRepository;
     private final InvoicePdfTemplate invoicePdfTemplate;
-
-    @Value("${app.documents.storage-dir:./storage/documents}")
-    private String storageDir;
+    private final ObjectStorage objectStorage;
 
     @Transactional
     public InvoiceFile downloadInvoicePdf(String invoiceNumber) {
@@ -73,28 +68,34 @@ public class InvoiceDocumentService {
             } else if (ownerCustomerNumber != null) {
                 assertDocumentBelongsToCustomer(doc, ownerCustomerNumber);
             }
-            if (doc.getFilePath() != null && "ready".equals(doc.getStatus())) {
-                Path path = resolveStoragePath(doc.getFilePath());
-                if (Files.isRegularFile(path)) {
-                    return new InvoiceFile(invoiceNumber, readBytes(path));
+            if (doc.getFilePath() != null && "ready".equals(doc.getStatus())
+                    && !ObjectKeys.isLegacyFilesystemPath(doc.getFilePath())
+                    && objectStorage.exists(doc.getFilePath())) {
+                byte[] cached = objectStorage.get(doc.getFilePath())
+                        .orElse(null);
+                if (cached != null) {
+                    return new InvoiceFile(invoiceNumber, cached);
                 }
-                log.info("Document {} référencé mais fichier manquant — régénération", invoiceNumber);
+                log.info("Document {} référencé mais objet manquant — régénération", invoiceNumber);
             }
         }
 
-        byte[] pdf = invoicePdfTemplate.generate(invoice);
-        String logicalPath = logicalInvoicePath(invoiceNumber);
-        Path physicalPath = resolveStoragePath(logicalPath);
-        writeBytes(physicalPath, pdf);
+        if (ownerCustomerNumber == null) {
+            throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable");
+        }
 
-        Document saved = persistDocument(invoice, existing.orElse(null), logicalPath);
-        log.info("PDF facture {} prêt (document id={}, path={})",
+        byte[] pdf = invoicePdfTemplate.generate(invoice);
+        String objectKey = ObjectKeys.invoice(ownerCustomerNumber, invoiceNumber);
+        objectStorage.put(objectKey, pdf, "application/pdf");
+
+        Document saved = persistDocument(invoice, existing.orElse(null), objectKey);
+        log.info("PDF facture {} prêt (document id={}, key={})",
                 invoiceNumber, saved.getId(), saved.getFilePath());
 
         return new InvoiceFile(invoiceNumber, pdf);
     }
 
-    private Document persistDocument(Invoice invoice, Document existing, String logicalPath) {
+    private Document persistDocument(Invoice invoice, Document existing, String objectKey) {
         Document doc = existing != null ? existing : Document.builder()
                 .customer(invoice.getCustomer())
                 .docType(DOC_TYPE_INVOICE)
@@ -103,7 +104,7 @@ public class InvoiceDocumentService {
 
         doc.setTitle("Facture " + invoice.getInvoiceNumber());
         doc.setStatus("ready");
-        doc.setFilePath(logicalPath);
+        doc.setFilePath(objectKey);
         doc.setRelatedReference(invoice.getOrder() != null ? invoice.getOrder().getOrderNumber() : null);
 
         try {
@@ -114,10 +115,11 @@ public class InvoiceDocumentService {
                     .findByDocTypeAndNaturalKey(DOC_TYPE_INVOICE, invoice.getInvoiceNumber())
                     .orElseThrow(() -> race);
             assertDocumentBelongsToCustomer(winner, invoice.getCustomer().getCustomerNumber());
-            if (winner.getFilePath() == null || !"ready".equals(winner.getStatus())) {
+            if (winner.getFilePath() == null || !"ready".equals(winner.getStatus())
+                    || ObjectKeys.isLegacyFilesystemPath(winner.getFilePath())) {
                 winner.setTitle(doc.getTitle());
                 winner.setStatus("ready");
-                winner.setFilePath(logicalPath);
+                winner.setFilePath(objectKey);
                 winner.setRelatedReference(doc.getRelatedReference());
                 return documentRepository.save(winner);
             }
@@ -129,44 +131,6 @@ public class InvoiceDocumentService {
         if (doc.getCustomer() == null
                 || !customerNumber.equals(doc.getCustomer().getCustomerNumber())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Facture introuvable");
-        }
-    }
-
-    private Path resolveStoragePath(String filePath) {
-        String relative = filePath;
-        if (relative.startsWith("/documents/")) {
-            relative = relative.substring("/documents/".length());
-        } else if (relative.startsWith("documents/")) {
-            relative = relative.substring("documents/".length());
-        } else if (relative.startsWith("/")) {
-            relative = relative.substring(1);
-        }
-        Path root = Path.of(storageDir).toAbsolutePath().normalize();
-        Path resolved = root.resolve(relative).normalize();
-        if (!resolved.startsWith(root)) {
-            throw new IllegalArgumentException("Chemin document hors du répertoire de stockage");
-        }
-        return resolved;
-    }
-
-    private static String logicalInvoicePath(String invoiceNumber) {
-        return "/documents/invoices/" + invoiceNumber + ".pdf";
-    }
-
-    private static byte[] readBytes(Path path) {
-        try {
-            return Files.readAllBytes(path);
-        } catch (IOException e) {
-            throw new IllegalStateException("Impossible de lire le PDF : " + path, e);
-        }
-    }
-
-    private static void writeBytes(Path path, byte[] bytes) {
-        try {
-            Files.createDirectories(path.getParent());
-            Files.write(path, bytes, StandardOpenOption.CREATE, StandardOpenOption.TRUNCATE_EXISTING, StandardOpenOption.WRITE);
-        } catch (IOException e) {
-            throw new IllegalStateException("Impossible d'écrire le PDF : " + path, e);
         }
     }
 

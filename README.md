@@ -31,11 +31,23 @@ docker compose up --build
 | API | http://localhost:8081 |
 | Swagger | http://localhost:8081/swagger-ui.html |
 | Activation emails (Mailpit) | http://localhost:8025 |
+| MinIO console | http://localhost:9001 |
+| MinIO S3 API | http://localhost:9000 |
 | Postgres | `localhost:5433` |
 
-Stop with `docker compose down`. Add `-v` only if you also want to wipe the database volume.
+Stop with `docker compose down`. Add `-v` only if you also want to wipe the database and MinIO volumes.
 
 Inside Docker, mail is sent to Mailpit, not Gmail. `MAIL_USERNAME` is still the **From** address, so it must be a valid email (for example `noreply@lesieurcristal.local`). Compose Postgres is a separate database from any local Postgres on port 5432.
+
+Invoice PDFs and dispute/claim attachments are stored in MinIO (bucket `lc-b2b-documents`). The browser never talks to MinIO; downloads go through the API.
+
+Infra only (IDE Java + `pnpm dev`):
+
+```bash
+docker compose up postgres mailpit minio
+```
+
+Then run the API with `./mvnw spring-boot:run` (`S3_ENDPOINT=http://localhost:9000`) and the frontend with `pnpm dev`.
 
 ## Run the API locally (no Docker)
 
@@ -53,8 +65,8 @@ Load `.env` in your IDE run configuration. The process does not read `.env` by i
 
 Do not commit `.env`. See `.env.example`.
 
-- **Local Java** uses `DB_HOST=localhost`, `DB_PORT=5432`, and Gmail SMTP.
-- **Compose** overrides host/port for Postgres and Mailpit. Optional: `POSTGRES_PASSWORD`, `NEXT_PUBLIC_API_URL`.
+- **Local Java** uses `DB_HOST=localhost`, `DB_PORT=5432`, Gmail SMTP, and MinIO at `http://localhost:9000`.
+- **Compose** overrides host/port for Postgres, Mailpit, and MinIO (`S3_ENDPOINT=http://minio:9000`). Optional: `POSTGRES_PASSWORD`, `NEXT_PUBLIC_API_URL`, `S3_ACCESS_KEY` / `S3_SECRET_KEY` (dev default `minioadmin`). Override those keys in production.
 
 ## Useful commands
 
@@ -64,4 +76,4 @@ Do not commit `.env`. See `.env.example`.
 docker compose logs -f backend
 ```
 
-`./mvnw test` runs unit tests plus integration tests. The IT classes start a real PostgreSQL with Testcontainers (Docker required) and exercise login, order submit, the ERP outbox, and tenant isolation over HTTP.
+`./mvnw test` runs unit tests plus integration tests. The IT classes start a real PostgreSQL and MinIO with Testcontainers (Docker required) and exercise login, order submit, the ERP outbox, tenant isolation, invoice PDFs, and dispute/claim attachments over HTTP. Compose does **not** run these tests.

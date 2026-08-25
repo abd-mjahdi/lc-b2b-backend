@@ -1,16 +1,22 @@
 package com.lesieurcristal.b2bportal.dispute.controller;
 
-import com.lesieurcristal.b2bportal.config.OpenApiConfig;
 import com.lesieurcristal.b2bportal.dispute.dto.CreateInvoiceDisputeRequest;
 import com.lesieurcristal.b2bportal.dispute.dto.InvoiceDisputeResponseDto;
 import com.lesieurcristal.b2bportal.dispute.dto.ResolveDisputeRequest;
 import com.lesieurcristal.b2bportal.dispute.service.DisputeService;
+import com.lesieurcristal.b2bportal.entity.app.InvoiceDispute;
+import com.lesieurcristal.b2bportal.storage.FileDownloadResponses;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
+import jakarta.validation.constraints.NotBlank;
+import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Size;
 import lombok.RequiredArgsConstructor;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.access.prepost.PreAuthorize;
+import org.springframework.validation.annotation.Validated;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -19,6 +25,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.multipart.MultipartFile;
 
 import java.util.List;
 
@@ -26,21 +33,23 @@ import java.util.List;
 @RestController
 @RequestMapping("/api/invoices")
 @RequiredArgsConstructor
+@Validated
 @org.springframework.security.access.prepost.PreAuthorize("isAuthenticated()")
 public class DisputeController {
 
     private final DisputeService disputeService;
 
-    // -------- Espace client --------
-
-    @Operation(summary = "[Client] Déclare une contestation sur une facture")
+    @Operation(summary = "[Client] Déclare une contestation sur une facture",
+            description = "multipart/form-data : champs reason, description, fichier optionnel (PDF/JPEG/PNG, 5 Mo max).")
     @PreAuthorize("hasRole('CLIENT')")
-    @PostMapping("/{invoiceNumber}/dispute")
+    @PostMapping(value = "/{invoiceNumber}/dispute", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public ResponseEntity<InvoiceDisputeResponseDto> declareDispute(
             @PathVariable String invoiceNumber,
-            @RequestParam(required = false) String filePath,
-            @Valid @RequestBody CreateInvoiceDisputeRequest dto) {
-        return ResponseEntity.ok(disputeService.createDispute(invoiceNumber, dto, filePath));
+            @RequestParam @NotNull InvoiceDispute.DisputeReason reason,
+            @RequestParam @NotBlank @Size(max = 4000) String description,
+            @RequestParam(required = false) MultipartFile file) {
+        CreateInvoiceDisputeRequest dto = new CreateInvoiceDisputeRequest(reason, description);
+        return ResponseEntity.ok(disputeService.createDispute(invoiceNumber, dto, file));
     }
 
     @Operation(summary = "[Client] Liste ses propres contestations")
@@ -57,7 +66,13 @@ public class DisputeController {
         return ResponseEntity.ok(disputeService.getByIdForCurrentUser(id));
     }
 
-    // -------- Espace admin --------
+    @Operation(summary = "[Client] Télécharge le justificatif d'une contestation")
+    @PreAuthorize("hasRole('CLIENT')")
+    @GetMapping("/disputes/mine/{id}/file")
+    public ResponseEntity<byte[]> downloadMine(@PathVariable Long id) {
+        DisputeService.AttachmentFile file = disputeService.downloadForCurrentUser(id);
+        return FileDownloadResponses.attachment(file.content(), file.contentType(), file.filename());
+    }
 
     @Operation(summary = "[Admin] Liste des contestations en attente d'arbitrage")
     @PreAuthorize("hasRole('ADMIN')")

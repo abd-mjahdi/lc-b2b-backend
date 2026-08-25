@@ -15,7 +15,6 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/* \
     && groupadd --system app \
     && useradd --system --gid app --home-dir /app --shell /usr/sbin/nologin app \
-    && mkdir -p /app/storage/documents \
     && chown -R app:app /app
 
 COPY --from=build --chown=app:app /app/target/portail-b2b-0.0.1-SNAPSHOT.jar /app/app.jar

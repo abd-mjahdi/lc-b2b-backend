@@ -22,6 +22,11 @@ spring:
     init:
       mode: never
 
+  servlet:
+    multipart:
+      max-file-size: 5MB
+      max-request-size: 6MB
+
   mail:
     host: ${MAIL_HOST}
     port: ${MAIL_PORT}
@@ -49,8 +54,13 @@ app:
     frontend-base-url: ${FRONTEND_BASE_URL}
     activation-path: ${ACTIVATION_PATH}
 
-  documents:
-    storage-dir: ${DOCUMENTS_STORAGE_DIR:./storage/documents}
+  s3:
+    endpoint: ${S3_ENDPOINT:http://localhost:9000}
+    region: ${S3_REGION:us-east-1}
+    bucket: ${S3_BUCKET:lc-b2b-documents}
+    access-key: ${S3_ACCESS_KEY:minioadmin}
+    secret-key: ${S3_SECRET_KEY:minioadmin}
+    path-style-access: ${S3_PATH_STYLE_ACCESS:true}
 
   erp:
     outbound-retry-ms: ${ERP_OUTBOUND_RETRY_MS:30000}

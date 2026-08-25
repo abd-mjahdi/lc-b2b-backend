@@ -37,7 +37,7 @@ Unfinished modules (cotation, PO upload, `/admin/demandes` inbox) are **redirect
 
 - [ ] Certificates / “outils” module if product needs it (orphan `CertificateSearch`)
 - [ ] Global admin orders queue (KPI Commandes still lands on clients directory)
-- [ ] Attachment upload for disputes/claims when storage API exists
+- [x] Attachment upload for disputes/claims when storage API exists
 - [ ] Certificates module when a real API exists
 
 ---

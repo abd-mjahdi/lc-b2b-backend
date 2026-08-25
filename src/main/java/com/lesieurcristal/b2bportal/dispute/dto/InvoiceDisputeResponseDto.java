@@ -1,8 +1,7 @@
 package com.lesieurcristal.b2bportal.dispute.dto;
 
 import com.lesieurcristal.b2bportal.entity.app.InvoiceDispute;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Size;
+import com.lesieurcristal.b2bportal.storage.ObjectKeys;
 
 import java.time.OffsetDateTime;
 
@@ -15,7 +14,8 @@ public record InvoiceDisputeResponseDto(
         String customerNumber,
         InvoiceDispute.DisputeReason reason,
         String description,
-        String filePath,
+        boolean hasAttachment,
+        String attachmentFilename,
         InvoiceDispute.DisputeStatus status,
         String previousInvoiceStatus,
         String resolutionNote,
@@ -24,13 +24,17 @@ public record InvoiceDisputeResponseDto(
         Long userId
 ) {
     public static InvoiceDisputeResponseDto from(InvoiceDispute d) {
+        boolean hasFile = d.getFilePath() != null
+                && !d.getFilePath().isBlank()
+                && !ObjectKeys.isLegacyFilesystemPath(d.getFilePath());
         return new InvoiceDisputeResponseDto(
                 d.getId(),
                 d.getInvoiceNumber(),
                 d.getCustomer() != null ? d.getCustomer().getCustomerNumber() : null,
                 d.getReason(),
                 d.getDescription(),
-                d.getFilePath(),
+                hasFile,
+                hasFile ? ObjectKeys.downloadFilename("justificatif", d.getId(), d.getFilePath()) : null,
                 d.getStatus(),
                 d.getPreviousInvoiceStatus(),
                 d.getResolutionNote(),

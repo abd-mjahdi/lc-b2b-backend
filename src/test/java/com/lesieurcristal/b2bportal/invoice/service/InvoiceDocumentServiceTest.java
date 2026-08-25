@@ -10,23 +10,20 @@ import com.lesieurcristal.b2bportal.invoice.pdf.InvoicePdfTemplate;
 import com.lesieurcristal.b2bportal.repository.DocumentRepository;
 import com.lesieurcristal.b2bportal.repository.InvoiceRepository;
 import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
+import com.lesieurcristal.b2bportal.storage.ObjectStorage;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.api.io.TempDir;
 import org.mockito.InjectMocks;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
-import org.springframework.test.util.ReflectionTestUtils;
 import org.springframework.web.server.ResponseStatusException;
 
 import java.math.BigDecimal;
 import java.nio.charset.StandardCharsets;
-import java.nio.file.Files;
-import java.nio.file.Path;
 import java.time.LocalDate;
 import java.util.Optional;
 
@@ -51,19 +48,17 @@ class InvoiceDocumentServiceTest {
     @Mock
     private InvoicePdfTemplate invoicePdfTemplate;
 
+    @Mock
+    private ObjectStorage objectStorage;
+
     @InjectMocks
     private InvoiceDocumentService service;
-
-    @TempDir
-    Path tempDir;
 
     private Customer customer;
     private Invoice invoice;
 
     @BeforeEach
     void setUp() {
-        ReflectionTestUtils.setField(service, "storageDir", tempDir.toString());
-
         customer = Customer.builder()
                 .customerNumber("CUST0001")
                 .companyName("Épicerie Al Amal SARL")
@@ -115,7 +110,7 @@ class InvoiceDocumentServiceTest {
     }
 
     @Test
-    void download_generatesOnceAndPersistsDocument() throws Exception {
+    void download_generatesOnceAndPersistsDocument() {
         when(invoiceRepository.findByInvoiceNumberWithOrder("900010001")).thenReturn(Optional.of(invoice));
         when(documentRepository.findByDocTypeAndNaturalKey("invoice", "900010001")).thenReturn(Optional.empty());
         byte[] pdf = "%PDF-fake-content".getBytes(StandardCharsets.US_ASCII);
@@ -129,18 +124,38 @@ class InvoiceDocumentServiceTest {
         InvoiceDocumentService.InvoiceFile first = service.downloadInvoicePdf("900010001");
 
         assertThat(first.content()).isEqualTo(pdf);
-        assertThat(Files.exists(tempDir.resolve("invoices/900010001.pdf"))).isTrue();
+        verify(objectStorage).put("invoices/CUST0001/900010001.pdf", pdf, "application/pdf");
         verify(invoicePdfTemplate, times(1)).generate(invoice);
         verify(documentRepository).save(any(Document.class));
     }
 
     @Test
-    void download_reusesExistingFileWithoutRegenerating() throws Exception {
-        Path existingFile = tempDir.resolve("invoices/900010001.pdf");
-        Files.createDirectories(existingFile.getParent());
+    void download_reusesExistingObjectWithoutRegenerating() {
         byte[] cached = "%PDF-cached".getBytes(StandardCharsets.US_ASCII);
-        Files.write(existingFile, cached);
+        Document doc = Document.builder()
+                .id(7L)
+                .customer(customer)
+                .docType("invoice")
+                .naturalKey("900010001")
+                .status("ready")
+                .filePath("invoices/CUST0001/900010001.pdf")
+                .build();
 
+        when(invoiceRepository.findByInvoiceNumberWithOrder("900010001")).thenReturn(Optional.of(invoice));
+        when(documentRepository.findByDocTypeAndNaturalKey("invoice", "900010001")).thenReturn(Optional.of(doc));
+        when(objectStorage.exists("invoices/CUST0001/900010001.pdf")).thenReturn(true);
+        when(objectStorage.get("invoices/CUST0001/900010001.pdf")).thenReturn(Optional.of(cached));
+
+        InvoiceDocumentService.InvoiceFile file = service.downloadInvoicePdf("900010001");
+
+        assertThat(file.content()).isEqualTo(cached);
+        verify(invoicePdfTemplate, never()).generate(any());
+        verify(documentRepository, never()).save(any());
+        verify(objectStorage, never()).put(any(), any(), any());
+    }
+
+    @Test
+    void download_legacyPathRegeneratesIntoObjectStore() {
         Document doc = Document.builder()
                 .id(7L)
                 .customer(customer)
@@ -149,15 +164,18 @@ class InvoiceDocumentServiceTest {
                 .status("ready")
                 .filePath("/documents/invoices/900010001.pdf")
                 .build();
+        byte[] pdf = "%PDF-new".getBytes(StandardCharsets.US_ASCII);
 
         when(invoiceRepository.findByInvoiceNumberWithOrder("900010001")).thenReturn(Optional.of(invoice));
         when(documentRepository.findByDocTypeAndNaturalKey("invoice", "900010001")).thenReturn(Optional.of(doc));
+        when(invoicePdfTemplate.generate(invoice)).thenReturn(pdf);
+        when(documentRepository.save(any(Document.class))).thenAnswer(inv -> inv.getArgument(0));
 
         InvoiceDocumentService.InvoiceFile file = service.downloadInvoicePdf("900010001");
 
-        assertThat(file.content()).isEqualTo(cached);
-        verify(invoicePdfTemplate, never()).generate(any());
-        verify(documentRepository, never()).save(any());
+        assertThat(file.content()).isEqualTo(pdf);
+        verify(objectStorage).put("invoices/CUST0001/900010001.pdf", pdf, "application/pdf");
+        verify(objectStorage, never()).exists("/documents/invoices/900010001.pdf");
     }
 
     @Test

@@ -4,6 +4,7 @@ import com.lesieurcristal.b2bportal.config.OpenApiConfig;
 import com.lesieurcristal.b2bportal.dispute.dto.InvoiceDisputeResponseDto;
 import com.lesieurcristal.b2bportal.dispute.dto.ResolveDisputeRequest;
 import com.lesieurcristal.b2bportal.dispute.service.DisputeService;
+import com.lesieurcristal.b2bportal.storage.FileDownloadResponses;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
@@ -55,5 +56,12 @@ public class AdminDisputeController {
             @PathVariable Long id,
             @Valid @RequestBody ResolveDisputeRequest body) {
         return ResponseEntity.ok(disputeService.rejectDispute(id, body.resolutionNote()));
+    }
+
+    @Operation(summary = "Télécharge le justificatif d'une contestation")
+    @GetMapping("/{id}/file")
+    public ResponseEntity<byte[]> download(@PathVariable Long id) {
+        DisputeService.AttachmentFile file = disputeService.downloadForAdmin(id);
+        return FileDownloadResponses.attachment(file.content(), file.contentType(), file.filename());
     }
 }

@@ -14,6 +14,8 @@ import com.lesieurcristal.b2bportal.repository.InvoiceDisputeRepository;
 import com.lesieurcristal.b2bportal.repository.InvoiceRepository;
 import com.lesieurcristal.b2bportal.repository.UserRepository;
 import com.lesieurcristal.b2bportal.security.AuthenticatedUser;
+import com.lesieurcristal.b2bportal.storage.ObjectStorage;
+import com.lesieurcristal.b2bportal.storage.UploadValidator;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -47,6 +49,10 @@ class DisputeServiceTest {
     private UserRepository userRepository;
     @Mock
     private PortalNotificationService portalNotificationService;
+    @Mock
+    private ObjectStorage objectStorage;
+    @Mock
+    private UploadValidator uploadValidator;
 
     private DisputeService disputeService;
 
@@ -61,7 +67,9 @@ class DisputeServiceTest {
                 invoiceRepository,
                 customerRepository,
                 userRepository,
-                portalNotificationService
+                portalNotificationService,
+                objectStorage,
+                uploadValidator
         );
 
         customer = Customer.builder()
@@ -113,6 +121,7 @@ class DisputeServiceTest {
     void createDispute_storesPreviousInvoiceStatusAndMarksDisputed() {
         authenticateAsClient();
 
+        when(uploadValidator.validateIfPresent(null)).thenReturn(Optional.empty());
         when(invoiceRepository.findById("900010099")).thenReturn(Optional.of(invoice));
         when(customerRepository.findById("CUST0001")).thenReturn(Optional.of(customer));
         when(userRepository.findById(1L)).thenReturn(Optional.of(clientUser));
@@ -131,6 +140,7 @@ class DisputeServiceTest {
 
         assertThat(result.previousInvoiceStatus()).isEqualTo("paid");
         assertThat(result.status()).isEqualTo(InvoiceDispute.DisputeStatus.PENDING);
+        assertThat(result.hasAttachment()).isFalse();
 
         ArgumentCaptor<InvoiceDispute> disputeCaptor = ArgumentCaptor.forClass(InvoiceDispute.class);
         verify(disputeRepository).save(disputeCaptor.capture());
