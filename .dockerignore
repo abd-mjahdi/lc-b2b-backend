@@ -1,0 +1,11 @@
+.git
+.idea
+.vscode
+target
+.mvn/wrapper/maven-wrapper.jar
+storage
+.env
+*.iml
+HELP.md
+src/test
+docker-compose.yml

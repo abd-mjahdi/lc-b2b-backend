@@ -1,0 +1,106 @@
+# Portail B2B — local stack
+# Clone the frontend repo as a sibling directory named `frontend`:
+#   lc-app/
+#     frontend/          <- Next.js repo
+#     lc-b2b-backend/    <- this repo (run compose from here)
+#
+#   cd lc-b2b-backend
+#   docker compose up --build
+#
+# App:        http://localhost:3000
+# API:        http://localhost:8081
+# Swagger:    http://localhost:8081/swagger-ui.html
+# Mail UI:    http://localhost:8025
+# Postgres:   localhost:5433 (user/password from .env / defaults)
+
+name: lc-b2b
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-portail_b2b}
+      POSTGRES_USER: ${POSTGRES_USER:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d portail_b2b"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+
+  mailpit:
+    image: axllent/mailpit:latest
+    ports:
+      - "8025:8025"
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8081:8081"
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_NAME: ${POSTGRES_DB:-portail_b2b}
+      DB_USERNAME: ${POSTGRES_USER:-postgres}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      MAIL_HOST: mailpit
+      MAIL_PORT: 1025
+      MAIL_USERNAME: mailpit
+      MAIL_PASSWORD: mailpit
+      MAIL_SMTP_AUTH: "false"
+      MAIL_SMTP_STARTTLS: "false"
+      JWT_SECRET: ${JWT_SECRET:-changeme-dev-only-32-byte-secret-key!!}
+      JWT_EXPIRATION_MS: ${JWT_EXPIRATION_MS:-86400000}
+      CORS_ALLOWED_ORIGIN: ${CORS_ALLOWED_ORIGIN:-http://localhost:3000}
+      CORS_ALLOWED_ORIGIN_IP: ${CORS_ALLOWED_ORIGIN_IP:-http://127.0.0.1:3000}
+      ACTIVATION_TOKEN_EXPIRATION_MS: ${ACTIVATION_TOKEN_EXPIRATION_MS:-604800000}
+      FRONTEND_BASE_URL: ${FRONTEND_BASE_URL:-http://localhost:3000}
+      ACTIVATION_PATH: ${ACTIVATION_PATH:-/activate}
+      DOCUMENTS_STORAGE_DIR: /app/storage/documents
+    volumes:
+      - backend_documents:/app/storage/documents
+    depends_on:
+      postgres:
+        condition: service_healthy
+      mailpit:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:8081/v3/api-docs"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ../frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+    ports:
+      - "3000:3000"
+    environment:
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8081}
+    depends_on:
+      backend:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:3000"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+
+volumes:
+  postgres_data:
+  backend_documents:
