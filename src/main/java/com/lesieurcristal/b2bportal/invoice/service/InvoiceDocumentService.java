@@ -22,7 +22,7 @@ import java.util.Optional;
 
 /**
  * Génère / réutilise le PDF facture (PRD — téléchargement).
- * Principe : vérifier {@code app.documents} d'abord, générer une seule fois.
+ * Principe : vérifier l'objet MinIO/S3 d'abord, générer une seule fois.
  * Clients : isolés à leur {@code customerNumber}. Admins : toute facture.
  */
 @Slf4j
@@ -68,13 +68,10 @@ public class InvoiceDocumentService {
             } else if (ownerCustomerNumber != null) {
                 assertDocumentBelongsToCustomer(doc, ownerCustomerNumber);
             }
-            if (doc.getFilePath() != null && "ready".equals(doc.getStatus())
-                    && !ObjectKeys.isLegacyFilesystemPath(doc.getFilePath())
-                    && objectStorage.exists(doc.getFilePath())) {
-                byte[] cached = objectStorage.get(doc.getFilePath())
-                        .orElse(null);
-                if (cached != null) {
-                    return new InvoiceFile(invoiceNumber, cached);
+            if ("ready".equals(doc.getStatus()) && ObjectKeys.isStoredObjectKey(doc.getFilePath())) {
+                Optional<byte[]> cached = objectStorage.get(doc.getFilePath());
+                if (cached.isPresent()) {
+                    return new InvoiceFile(invoiceNumber, cached.get());
                 }
                 log.info("Document {} référencé mais objet manquant — régénération", invoiceNumber);
             }
@@ -115,8 +112,8 @@ public class InvoiceDocumentService {
                     .findByDocTypeAndNaturalKey(DOC_TYPE_INVOICE, invoice.getInvoiceNumber())
                     .orElseThrow(() -> race);
             assertDocumentBelongsToCustomer(winner, invoice.getCustomer().getCustomerNumber());
-            if (winner.getFilePath() == null || !"ready".equals(winner.getStatus())
-                    || ObjectKeys.isLegacyFilesystemPath(winner.getFilePath())) {
+            if (!"ready".equals(winner.getStatus())
+                    || !ObjectKeys.isStoredObjectKey(winner.getFilePath())) {
                 winner.setTitle(doc.getTitle());
                 winner.setStatus("ready");
                 winner.setFilePath(objectKey);

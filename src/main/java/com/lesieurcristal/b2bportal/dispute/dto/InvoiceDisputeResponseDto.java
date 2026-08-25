@@ -12,6 +12,7 @@ public record InvoiceDisputeResponseDto(
         Long id,
         String invoiceNumber,
         String customerNumber,
+        String customerName,
         InvoiceDispute.DisputeReason reason,
         String description,
         boolean hasAttachment,
@@ -24,13 +25,12 @@ public record InvoiceDisputeResponseDto(
         Long userId
 ) {
     public static InvoiceDisputeResponseDto from(InvoiceDispute d) {
-        boolean hasFile = d.getFilePath() != null
-                && !d.getFilePath().isBlank()
-                && !ObjectKeys.isLegacyFilesystemPath(d.getFilePath());
+        boolean hasFile = ObjectKeys.isStoredObjectKey(d.getFilePath());
         return new InvoiceDisputeResponseDto(
                 d.getId(),
                 d.getInvoiceNumber(),
                 d.getCustomer() != null ? d.getCustomer().getCustomerNumber() : null,
+                d.getCustomer() != null ? d.getCustomer().getCompanyName() : null,
                 d.getReason(),
                 d.getDescription(),
                 hasFile,

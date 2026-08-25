@@ -8,6 +8,7 @@ import java.time.OffsetDateTime;
 public record ReclamationResponseDto(
         Long id,
         String customerNumber,
+        String customerName,
         String lotNumber,
         String description,
         boolean hasAttachment,
@@ -16,13 +17,11 @@ public record ReclamationResponseDto(
         OffsetDateTime receivedAt
 ) {
     public static ReclamationResponseDto from(Reclamation r) {
-        boolean hasFile = r.getAttachmentPath() != null
-                && !r.getAttachmentPath().isBlank()
-                && !ObjectKeys.isLegacyFilesystemPath(r.getAttachmentPath())
-                && !r.getAttachmentPath().startsWith("/uploads/");
+        boolean hasFile = ObjectKeys.isStoredObjectKey(r.getAttachmentPath());
         return new ReclamationResponseDto(
                 r.getId(),
                 r.getCustomer() != null ? r.getCustomer().getCustomerNumber() : null,
+                r.getCustomer() != null ? r.getCustomer().getCompanyName() : null,
                 r.getLotNumber(),
                 r.getDescription(),
                 hasFile,

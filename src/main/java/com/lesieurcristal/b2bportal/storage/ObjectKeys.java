@@ -44,6 +44,18 @@ public final class ObjectKeys {
         return path.startsWith("/documents/") || path.startsWith("documents/");
     }
 
+    /** True when {@code path} is an object key we can GET from MinIO/S3. */
+    public static boolean isStoredObjectKey(String path) {
+        if (path == null || path.isBlank() || isLegacyFilesystemPath(path)) {
+            return false;
+        }
+        String value = path.trim();
+        return !value.startsWith("/uploads/")
+                && !value.startsWith("http://")
+                && !value.startsWith("https://")
+                && !value.startsWith("/");
+    }
+
     public static String extensionOf(String key) {
         if (key == null) {
             return "";

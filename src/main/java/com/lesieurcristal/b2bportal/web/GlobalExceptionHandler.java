@@ -77,15 +77,14 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MaxUploadSizeExceededException.class)
     public ResponseEntity<Map<String, Object>> handleUploadTooLarge(MaxUploadSizeExceededException ex) {
-        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorBody(
-                HttpStatus.PAYLOAD_TOO_LARGE.value(),
-                "PAYLOAD_TOO_LARGE",
-                "Fichier trop volumineux (maximum 5 Mo)"
-        ));
+        return payloadTooLarge();
     }
 
     @ExceptionHandler(MultipartException.class)
     public ResponseEntity<Map<String, Object>> handleMultipart(MultipartException ex) {
+        if (causedByMaxUploadSize(ex)) {
+            return payloadTooLarge();
+        }
         return ResponseEntity.badRequest().body(errorBody(
                 HttpStatus.BAD_REQUEST.value(),
                 "BAD_REQUEST",
@@ -154,6 +153,28 @@ public class GlobalExceptionHandler {
                 HttpStatus.CONFLICT.value(),
                 "CONFLICT",
                 message != null ? message : "État invalide"
+        ));
+    }
+
+    private static boolean causedByMaxUploadSize(Throwable ex) {
+        for (Throwable t = ex; t != null; t = t.getCause()) {
+            if (t instanceof MaxUploadSizeExceededException) {
+                return true;
+            }
+            String name = t.getClass().getName();
+            if (name.contains("SizeLimitExceededException")
+                    || name.contains("MaxUploadSizeExceededException")) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static ResponseEntity<Map<String, Object>> payloadTooLarge() {
+        return ResponseEntity.status(HttpStatus.PAYLOAD_TOO_LARGE).body(errorBody(
+                HttpStatus.PAYLOAD_TOO_LARGE.value(),
+                "PAYLOAD_TOO_LARGE",
+                "Fichier trop volumineux (maximum 5 Mo)"
         ));
     }
 

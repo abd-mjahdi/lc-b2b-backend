@@ -73,36 +73,40 @@ public class ReclamationService {
                 .status("new")
                 .build());
 
-        if (upload.isPresent()) {
-            UploadValidator.ValidatedUpload validated = upload.get();
-            String key = ObjectKeys.claim(customer.getCustomerNumber(), saved.getId(), validated.extension());
-            try {
-                objectStorage.put(key, validated.bytes(), validated.contentType());
-                saved.setAttachmentPath(key);
+        String uploadedKey = null;
+        try {
+            if (upload.isPresent()) {
+                UploadValidator.ValidatedUpload validated = upload.get();
+                uploadedKey = ObjectKeys.claim(
+                        customer.getCustomerNumber(), saved.getId(), validated.extension());
+                objectStorage.put(uploadedKey, validated.bytes(), validated.contentType());
+                saved.setAttachmentPath(uploadedKey);
                 saved = reclamationRepository.save(saved);
-            } catch (RuntimeException e) {
+            }
+
+            portalNotificationService.createAdminBroadcast(
+                    "Nouvelle réclamation client",
+                    String.format("Réclamation ouverte par %s (Client #%s). Lot : %s. Détail : %s",
+                            customer.getCompanyName(),
+                            customer.getCustomerNumber(),
+                            dto.lotNumber(),
+                            truncate(dto.description(), 120)),
+                    "CLAIM_OPENED",
+                    "RECLAMATION",
+                    saved.getId().toString(),
+                    "/admin/claims"
+            );
+            return ReclamationResponseDto.from(saved);
+        } catch (RuntimeException e) {
+            if (uploadedKey != null) {
                 try {
-                    objectStorage.delete(key);
+                    objectStorage.delete(uploadedKey);
                 } catch (RuntimeException ignored) {
                     log.warn("Nettoyage S3 échoué après échec réclamation {}", saved.getId());
                 }
-                throw e;
             }
+            throw e;
         }
-
-        portalNotificationService.createAdminBroadcast(
-                "Nouvelle réclamation client",
-                String.format("Réclamation ouverte par %s (Client #%s). Lot : %s. Détail : %s",
-                        customer.getCompanyName(),
-                        customer.getCustomerNumber(),
-                        dto.lotNumber(),
-                        truncate(dto.description(), 120)),
-                "CLAIM_OPENED",
-                "RECLAMATION",
-                saved.getId().toString(),
-                "/admin/claims"
-        );
-        return ReclamationResponseDto.from(saved);
     }
 
     @Transactional(readOnly = true)
@@ -176,9 +180,7 @@ public class ReclamationService {
     }
 
     private AttachmentFile readAttachment(Reclamation r) {
-        if (r.getAttachmentPath() == null || r.getAttachmentPath().isBlank()
-                || ObjectKeys.isLegacyFilesystemPath(r.getAttachmentPath())
-                || r.getAttachmentPath().startsWith("/uploads/")) {
+        if (!ObjectKeys.isStoredObjectKey(r.getAttachmentPath())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable");
         }
         byte[] content = objectStorage.get(r.getAttachmentPath())

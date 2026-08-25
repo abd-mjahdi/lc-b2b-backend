@@ -89,46 +89,46 @@ public class DisputeService {
                 .previousInvoiceStatus(previousStatus)
                 .build());
 
-        if (upload.isPresent()) {
-            UploadValidator.ValidatedUpload validated = upload.get();
-            String key = ObjectKeys.dispute(customer.getCustomerNumber(), saved.getId(), validated.extension());
-            try {
-                objectStorage.put(key, validated.bytes(), validated.contentType());
-                saved.setFilePath(key);
+        String uploadedKey = null;
+        try {
+            if (upload.isPresent()) {
+                UploadValidator.ValidatedUpload validated = upload.get();
+                uploadedKey = ObjectKeys.dispute(
+                        customer.getCustomerNumber(), saved.getId(), validated.extension());
+                objectStorage.put(uploadedKey, validated.bytes(), validated.contentType());
+                saved.setFilePath(uploadedKey);
                 saved = disputeRepository.save(saved);
-            } catch (RuntimeException e) {
-                try {
-                    objectStorage.delete(key);
-                } catch (RuntimeException ignored) {
-                    log.warn("Nettoyage S3 échoué après échec contestation {}", saved.getId());
-                }
-                throw e;
             }
+
+            invoice.setInvoiceStatus("disputed");
+            invoiceRepository.save(invoice);
+
+            String reasonLabel = translateReason(dto.reason());
+            portalNotificationService.createAdminBroadcast(
+                    "Contestation de facture reçue",
+                    String.format(
+                            "Facture #%s contestée par %s (Client #%s). Motif : %s.",
+                            invoiceNumber, customer.getCompanyName(),
+                            customer.getCustomerNumber(), reasonLabel),
+                    "DISPUTE_OPENED",
+                    "INVOICE_DISPUTE",
+                    saved.getId().toString(),
+                    "/admin/disputes"
+            );
+            return InvoiceDisputeResponseDto.from(saved);
+        } catch (RuntimeException e) {
+            deleteQuietly(uploadedKey, "contestation", saved.getId());
+            throw e;
         }
-
-        invoice.setInvoiceStatus("disputed");
-        invoiceRepository.save(invoice);
-
-        String reasonLabel = translateReason(dto.reason());
-        portalNotificationService.createAdminBroadcast(
-                "Contestation de facture reçue",
-                String.format(
-                        "Facture #%s contestée par %s (Client #%s). Motif : %s.",
-                        invoiceNumber, customer.getCompanyName(),
-                        customer.getCustomerNumber(), reasonLabel),
-                "DISPUTE_OPENED",
-                "INVOICE_DISPUTE",
-                saved.getId().toString(),
-                "/admin/disputes"
-        );
-
-        return InvoiceDisputeResponseDto.from(saved);
     }
 
     @Transactional(readOnly = true)
     public List<InvoiceDisputeResponseDto> listForCurrentUser() {
         AuthenticatedUser current = SecurityUtils.getCurrentUser()
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
+        if (current.getCustomerNumber() == null || current.getCustomerNumber().isBlank()) {
+            return List.of();
+        }
         return disputeRepository
                 .findByCustomer_CustomerNumberOrderByCreatedAtDesc(current.getCustomerNumber())
                 .stream()
@@ -238,8 +238,10 @@ public class DisputeService {
                 .orElseThrow(() -> new IllegalStateException("Non authentifié"));
         InvoiceDispute d = disputeRepository.findById(id)
                 .orElseThrow(() -> new EntityNotFoundException("Contestation introuvable"));
-        if (current.getCustomerNumber() != null
-                && !d.getCustomer().getCustomerNumber().equals(current.getCustomerNumber())) {
+        String customerNumber = current.getCustomerNumber();
+        if (customerNumber == null || customerNumber.isBlank()
+                || d.getCustomer() == null
+                || !customerNumber.equals(d.getCustomer().getCustomerNumber())) {
             throw new SecurityException("Accès refusé");
         }
         return d;
@@ -257,8 +259,7 @@ public class DisputeService {
     }
 
     private AttachmentFile readAttachment(InvoiceDispute d) {
-        if (d.getFilePath() == null || d.getFilePath().isBlank()
-                || ObjectKeys.isLegacyFilesystemPath(d.getFilePath())) {
+        if (!ObjectKeys.isStoredObjectKey(d.getFilePath())) {
             throw new ResponseStatusException(HttpStatus.NOT_FOUND, "Pièce jointe introuvable");
         }
         byte[] content = objectStorage.get(d.getFilePath())
@@ -288,6 +289,17 @@ public class DisputeService {
             log.info("Facture {} restaurée à « {} » après résolution contestation {}",
                     inv.getInvoiceNumber(), restored, d.getId());
         });
+    }
+
+    private void deleteQuietly(String key, String kind, Long id) {
+        if (key == null) {
+            return;
+        }
+        try {
+            objectStorage.delete(key);
+        } catch (RuntimeException ignored) {
+            log.warn("Nettoyage S3 échoué après échec {} {}", kind, id);
+        }
     }
 
     private static String translateReason(InvoiceDispute.DisputeReason r) {

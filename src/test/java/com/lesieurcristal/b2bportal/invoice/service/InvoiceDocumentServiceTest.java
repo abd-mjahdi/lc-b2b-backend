@@ -143,7 +143,6 @@ class InvoiceDocumentServiceTest {
 
         when(invoiceRepository.findByInvoiceNumberWithOrder("900010001")).thenReturn(Optional.of(invoice));
         when(documentRepository.findByDocTypeAndNaturalKey("invoice", "900010001")).thenReturn(Optional.of(doc));
-        when(objectStorage.exists("invoices/CUST0001/900010001.pdf")).thenReturn(true);
         when(objectStorage.get("invoices/CUST0001/900010001.pdf")).thenReturn(Optional.of(cached));
 
         InvoiceDocumentService.InvoiceFile file = service.downloadInvoicePdf("900010001");
@@ -175,7 +174,7 @@ class InvoiceDocumentServiceTest {
 
         assertThat(file.content()).isEqualTo(pdf);
         verify(objectStorage).put("invoices/CUST0001/900010001.pdf", pdf, "application/pdf");
-        verify(objectStorage, never()).exists("/documents/invoices/900010001.pdf");
+        verify(objectStorage, never()).get("/documents/invoices/900010001.pdf");
     }
 
     @Test

@@ -96,8 +96,8 @@ public class InvoiceController {
     }
 
     @Operation(summary = "Télécharger le PDF d'une facture",
-            description = "Génère le PDF une seule fois, le stocke dans app.documents, "
-                    + "puis réutilise le fichier aux appels suivants. Isolé au client connecté.")
+            description = "Génère le PDF une seule fois, le stocke dans MinIO/S3, "
+                    + "puis réutilise l'objet aux appels suivants. Isolé au client connecté.")
     @ApiResponses({
             @ApiResponse(responseCode = "200", description = "PDF de la facture"),
             @ApiResponse(responseCode = "400", description = "Aucun numéro client associé"),
