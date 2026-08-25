@@ -53,7 +53,7 @@ services:
       DB_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       MAIL_HOST: mailpit
       MAIL_PORT: 1025
-      MAIL_USERNAME: mailpit
+      MAIL_USERNAME: ${MAIL_USERNAME:-noreply@lesieurcristal.local}
       MAIL_PASSWORD: mailpit
       MAIL_SMTP_AUTH: "false"
       MAIL_SMTP_STARTTLS: "false"
