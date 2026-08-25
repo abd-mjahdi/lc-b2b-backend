@@ -9,4 +9,6 @@ public interface ErpOutboxRepository extends JpaRepository<ErpOutbox, Long> {
 
     List<ErpOutbox> findTop20ByDirectionAndStatusInOrderByCreatedAtAsc(
             String direction, List<String> statuses);
+
+    List<ErpOutbox> findByDirectionAndEventTypeOrderByIdAsc(String direction, String eventType);
 }

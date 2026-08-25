@@ -2,7 +2,12 @@
 
 Spring Boot 3 backend for the Lesieur Cristal B2B portal: catalog, orders, samples, invoices, disputes, claims, appointments, and JWT-secured client/admin APIs. PostgreSQL + Liquibase. Outbound ERP traffic goes through a transactional outbox.
 
-The Next.js frontend lives in a **separate repo**. Clone it next to this one as a folder named `frontend`.
+The Next.js frontend lives in a **separate repo**: [B2B-Portal-For-Lesieur-Cristal-Avril---Frontend](https://github.com/OuafikMohammed/B2B-Portal-For-Lesieur-Cristal-Avril---Frontend). Clone it next to this one as a folder named `frontend`.
+
+```bash
+cd parent
+git clone https://github.com/OuafikMohammed/B2B-Portal-For-Lesieur-Cristal-Avril---Frontend.git frontend
+```
 
 ```text
 parent/
@@ -58,3 +63,5 @@ Do not commit `.env`. See `.env.example`.
 ./mvnw -DskipTests package
 docker compose logs -f backend
 ```
+
+`./mvnw test` runs unit tests plus integration tests. The IT classes start a real PostgreSQL with Testcontainers (Docker required) and exercise login, order submit, the ERP outbox, and tenant isolation over HTTP.

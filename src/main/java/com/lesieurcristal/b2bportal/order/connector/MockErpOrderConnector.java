@@ -110,7 +110,6 @@ public class MockErpOrderConnector implements ErpOrderConnector {
 
             orderStatusRepository.save(OrderStatus.builder()
                     .order(saved)
-                    .orderNumber(saved.getOrderNumber())
                     .currentStatus("confirmed")
                     .statusUpdatedAt(now)
                     .expectedDeliveryDate(command.requestedDeliveryDate())
