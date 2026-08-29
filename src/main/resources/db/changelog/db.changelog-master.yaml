@@ -41,5 +41,8 @@ databaseChangeLog:
   - include:
       file: V12_erp_outbox_and_inbound.sql
       relativeToChangelogFile: true
+  - include:
+      file: V13_product_in_stock.sql
+      relativeToChangelogFile: true
 
   

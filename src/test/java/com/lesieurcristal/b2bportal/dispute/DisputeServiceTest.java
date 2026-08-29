@@ -27,6 +27,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -184,6 +185,15 @@ class DisputeServiceTest {
         ArgumentCaptor<Invoice> invoiceCaptor = ArgumentCaptor.forClass(Invoice.class);
         verify(invoiceRepository).save(invoiceCaptor.capture());
         assertThat(invoiceCaptor.getValue().getInvoiceStatus()).isEqualTo("paid");
+        verify(portalNotificationService).createNotificationForUser(
+                clientUser,
+                "Votre contestation a été acceptée",
+                "Votre contestation de la facture 900010099 a été acceptée. Le statut de paiement de la facture a été restauré.",
+                "DISPUTE_RESOLVED",
+                "INVOICE_DISPUTE",
+                "7",
+                "/dashboard/factures/900010099"
+        );
     }
 
     @Test
@@ -239,6 +249,27 @@ class DisputeServiceTest {
                 .isInstanceOf(IllegalStateException.class)
                 .hasMessageContaining("PENDING");
 
+        verify(disputeRepository, never()).save(any());
         verify(invoiceRepository, never()).save(any());
+    }
+
+    @Test
+    void listAllForAdmin_includesResolvedDisputes() {
+        InvoiceDispute approved = InvoiceDispute.builder()
+                .id(11L)
+                .invoiceNumber("900010099")
+                .customer(customer)
+                .reason(InvoiceDispute.DisputeReason.OTHER)
+                .description("ok")
+                .status(InvoiceDispute.DisputeStatus.APPROVED)
+                .previousInvoiceStatus("paid")
+                .build();
+        when(disputeRepository.findAll()).thenReturn(List.of(approved));
+
+        List<InvoiceDisputeResponseDto> rows = disputeService.listAllForAdmin();
+
+        assertThat(rows).hasSize(1);
+        assertThat(rows.get(0).status()).isEqualTo(InvoiceDispute.DisputeStatus.APPROVED);
+        assertThat(rows.get(0).customerNumber()).isEqualTo("CUST0001");
     }
 }

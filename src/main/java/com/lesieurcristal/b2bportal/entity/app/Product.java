@@ -76,6 +76,19 @@ public class Product {
     @Builder.Default
     private Boolean isActive = true;
 
+    /** When false, listed in the catalog but not orderable or sampleable. */
+    @Column(name = "in_stock", nullable = false)
+    @Builder.Default
+    private Boolean inStock = true;
+
+    public boolean isListed() {
+        return Boolean.TRUE.equals(isActive);
+    }
+
+    public boolean isSellable() {
+        return isListed() && !Boolean.FALSE.equals(inStock);
+    }
+
     @CreationTimestamp
     @Column(name = "created_at", nullable = false, updatable = false)
     private OffsetDateTime createdAt;

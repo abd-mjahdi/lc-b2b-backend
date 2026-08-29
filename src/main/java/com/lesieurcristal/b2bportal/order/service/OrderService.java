@@ -445,8 +445,11 @@ public class OrderService {
     private Product requireActiveProduct(String productCode) {
         Product product = productRepository.findById(productCode)
                 .orElseThrow(() -> new IllegalArgumentException("Produit inconnu : " + productCode));
-        if (!Boolean.TRUE.equals(product.getIsActive())) {
-            throw new IllegalArgumentException("Produit inconnu : " + productCode);
+        if (!product.isSellable()) {
+            if (!product.isListed()) {
+                throw new IllegalArgumentException("Produit inconnu : " + productCode);
+            }
+            throw new IllegalArgumentException("Produit en rupture de stock : " + productCode);
         }
         return product;
     }

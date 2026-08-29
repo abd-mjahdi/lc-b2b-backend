@@ -16,6 +16,7 @@ public record SampleRequestResponseDto(
         String linkedOrderNumber,
         String resultingOrderNumber,
         String customerNumber,
+        String customerName,
         Long userId,
         OffsetDateTime requestedAt
 ) {
@@ -31,6 +32,7 @@ public record SampleRequestResponseDto(
                 sr.getLinkedOrderNumber(),
                 sr.getResultingOrder() != null ? sr.getResultingOrder().getOrderNumber() : null,
                 sr.getCustomer() != null ? sr.getCustomer().getCustomerNumber() : null,
+                sr.getCustomer() != null ? sr.getCustomer().getCompanyName() : null,
                 sr.getUser() != null ? sr.getUser().getId() : null,
                 sr.getRequestedAt()
         );

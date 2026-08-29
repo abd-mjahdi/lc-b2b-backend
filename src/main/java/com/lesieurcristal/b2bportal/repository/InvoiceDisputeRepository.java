@@ -23,7 +23,7 @@ public interface InvoiceDisputeRepository extends JpaRepository<InvoiceDispute, 
 
     List<InvoiceDispute> findByInvoiceNumberOrderByCreatedAtDesc(String invoiceNumber);
 
-    @Query("SELECT d FROM InvoiceDispute d JOIN FETCH d.customer")
+    @Query("SELECT d FROM InvoiceDispute d JOIN FETCH d.customer ORDER BY d.createdAt DESC")
     @Override
     List<InvoiceDispute> findAll();
 

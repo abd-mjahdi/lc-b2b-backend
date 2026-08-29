@@ -9,6 +9,7 @@ public record ReclamationResponseDto(
         Long id,
         String customerNumber,
         String customerName,
+        String userName,
         String lotNumber,
         String description,
         boolean hasAttachment,
@@ -22,6 +23,7 @@ public record ReclamationResponseDto(
                 r.getId(),
                 r.getCustomer() != null ? r.getCustomer().getCustomerNumber() : null,
                 r.getCustomer() != null ? r.getCustomer().getCompanyName() : null,
+                formatUserName(r),
                 r.getLotNumber(),
                 r.getDescription(),
                 hasFile,
@@ -29,5 +31,15 @@ public record ReclamationResponseDto(
                 r.getStatus(),
                 r.getReceivedAt()
         );
+    }
+
+    private static String formatUserName(Reclamation r) {
+        if (r.getUser() == null) {
+            return null;
+        }
+        String first = r.getUser().getFirstName() != null ? r.getUser().getFirstName() : "";
+        String last = r.getUser().getLastName() != null ? r.getUser().getLastName() : "";
+        String combined = (first + " " + last).trim();
+        return combined.isEmpty() ? r.getUser().getLogin() : combined;
     }
 }

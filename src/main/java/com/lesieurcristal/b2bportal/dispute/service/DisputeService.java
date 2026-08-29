@@ -194,7 +194,7 @@ public class DisputeService {
                     "DISPUTE_RESOLVED",
                     "INVOICE_DISPUTE",
                     String.valueOf(saved.getId()),
-                    "/dashboard/factures"
+                    invoiceTargetUrl(d)
             );
         }
         return InvoiceDisputeResponseDto.from(saved);
@@ -227,7 +227,7 @@ public class DisputeService {
                     "DISPUTE_RESOLVED",
                     "INVOICE_DISPUTE",
                     String.valueOf(saved.getId()),
-                    "/dashboard/factures"
+                    invoiceTargetUrl(d)
             );
         }
         return InvoiceDisputeResponseDto.from(saved);
@@ -300,6 +300,14 @@ public class DisputeService {
         } catch (RuntimeException ignored) {
             log.warn("Nettoyage S3 échoué après échec {} {}", kind, id);
         }
+    }
+
+    private static String invoiceTargetUrl(InvoiceDispute d) {
+        String invoiceNumber = d.getInvoiceNumber();
+        if (invoiceNumber == null || invoiceNumber.isBlank()) {
+            return "/dashboard/factures";
+        }
+        return "/dashboard/factures/" + invoiceNumber;
     }
 
     private static String translateReason(InvoiceDispute.DisputeReason r) {

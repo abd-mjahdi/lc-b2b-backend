@@ -1,7 +1,7 @@
 package com.lesieurcristal.b2bportal.catalog.controller;
 
 import com.lesieurcristal.b2bportal.catalog.dto.ProductDto;
-import com.lesieurcristal.b2bportal.repository.ProductRepository;
+import com.lesieurcristal.b2bportal.catalog.service.ProductService;
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import lombok.RequiredArgsConstructor;
@@ -20,21 +20,17 @@ import java.util.List;
 @PreAuthorize("isAuthenticated()")
 public class ProductController {
 
-    private final ProductRepository productRepository;
+    private final ProductService productService;
 
-    @Operation(summary = "Liste complète du catalogue, triée par catégorie puis nom")
+    @Operation(summary = "Catalogue vendable (produits actifs, y compris rupture de stock)")
     @GetMapping
     public ResponseEntity<List<ProductDto>> listAll() {
-        return ResponseEntity.ok(productRepository
-                .findByIsActiveTrueOrderByCategoryAscNameAsc()
-                .stream().map(ProductDto::from).toList());
+        return ResponseEntity.ok(productService.listCatalog());
     }
 
-    @Operation(summary = "Liste des produits éligibles aux échantillons")
+    @Operation(summary = "Produits éligibles aux échantillons et actuellement en stock")
     @GetMapping("/sampleable")
     public ResponseEntity<List<ProductDto>> listSampleable() {
-        return ResponseEntity.ok(productRepository
-                .findByIsActiveTrueAndIsSampleableTrueOrderByCategoryAscNameAsc()
-                .stream().map(ProductDto::from).toList());
+        return ResponseEntity.ok(productService.listSampleable());
     }
 }

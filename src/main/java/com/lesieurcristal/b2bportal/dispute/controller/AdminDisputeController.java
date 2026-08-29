@@ -33,10 +33,12 @@ public class AdminDisputeController {
 
     private final DisputeService disputeService;
 
-    @Operation(summary = "Liste des contestations en attente")
+    @Operation(summary = "Liste de toutes les contestations",
+            description = "Retourne PENDING, APPROVED et REJECTED, plus récentes d'abord. "
+                    + "Le filtre de statut est appliqué côté interface admin.")
     @GetMapping
-    public ResponseEntity<List<InvoiceDisputeResponseDto>> pending() {
-        return ResponseEntity.ok(disputeService.listPendingForAdmin());
+    public ResponseEntity<List<InvoiceDisputeResponseDto>> all() {
+        return ResponseEntity.ok(disputeService.listAllForAdmin());
     }
 
     @Operation(summary = "Approuve une contestation",
